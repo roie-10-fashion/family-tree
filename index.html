@@ -112,6 +112,15 @@ h1,h2,h3{font-family:var(--font-display);text-wrap:balance;margin:0}
 .card .nm{font-weight:700;font-size:14px;line-height:1.2;overflow-wrap:anywhere}
 .card .yr{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
 .card .mn{font-size:11px;color:var(--muted)}
+.card.mini{position:absolute;width:150px;height:60px;min-height:0;padding:6px 8px;gap:7px;border-top-width:3px;border-radius:8px;align-items:center}
+.card.mini .avatar{width:34px;height:34px;font-size:12px}
+.card.mini .nm{font-size:13px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.card.mini .yr{font-size:11px}.card.mini .mn{font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:96px}
+.card.mini.focus{width:150px;outline:3px solid var(--accent);outline-offset:2px}
+.card.mini.uncertain::after{bottom:2px;font-size:9px}
+.card.ph{justify-content:center;border:1.5px dashed var(--line);border-top:1.5px dashed var(--line);background:transparent;box-shadow:none;color:var(--muted);font-weight:700;font-size:13px}
+.card.ph:hover{border-color:var(--accent);color:var(--accent)}
+.chartopts select{padding:1px 4px;border:1px solid var(--line);border-radius:6px;background:var(--bg)}
 .zoom{position:absolute;bottom:14px;inset-inline-end:14px;display:flex;flex-direction:column;gap:6px;z-index:5}
 .zoom button{width:36px;height:36px;border-radius:8px;border:1px solid var(--line);background:var(--surface);font-weight:700;font-size:18px;box-shadow:var(--shadow)}
 .chartopts{position:absolute;top:12px;inset-inline-end:14px;z-index:5;display:flex;gap:8px;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:6px 10px;font-size:13px;box-shadow:var(--shadow)}
@@ -234,9 +243,9 @@ dialog::backdrop{background:rgba(10,20,20,.45)}
       <button class="btn small" id="nav-home" title="חזרה אליי">🏠 אני</button>
     </div>
     <div class="chartopts">
-      <label><input type="checkbox" id="opt-sibs" checked> אחים</label>
-      <label><input type="checkbox" id="opt-gk"> נכדים</label>
-      <label><input type="checkbox" id="opt-gen3" checked> 3 דורות למעלה</label>
+      <label>דורות למעלה <select id="opt-up"><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option></select></label>
+      <label>למטה <select id="opt-down"><option value="0">0</option><option>1</option><option>2</option><option>3</option></select></label>
+      <label><input type="checkbox" id="opt-cous"> דודים ובני דודים</label>
     </div>
     <div class="zoom">
       <button id="z-in" aria-label="הגדל">+</button>
@@ -406,73 +415,101 @@ function renderAll(center){renderHeader();if(S.view==="tree")renderTree(center);
 function card(id,opts={}){
   if(!id){const e=el("div",{class:"card empty"+(S.canWrite&&opts.add?"":" disabled")},S.canWrite&&opts.add?"+ "+opts.add.label:"");if(S.canWrite&&opts.add)e.addEventListener("click",ev=>{ev.stopPropagation();opts.add.fn()});return e}
   const p=P(id);if(!p)return el("div",{class:"card empty disabled"});
-  const c=el("div",{class:`card ${p.sex||""} ${opts.focus?"focus":""} ${opts.small?"small":""} ${p.uncertain?"uncertain":""}`,"data-id":id,tabindex:"0",role:"button","aria-label":fullName(p)});
+  const c=el("div",{class:`card ${p.sex||""} ${opts.focus?"focus":""} ${opts.small?"small":""} ${opts.mini?"mini":""} ${p.uncertain?"uncertain":""}`,"data-id":id,tabindex:"0",role:"button","aria-label":fullName(p)});
   c.append(avatar(p));
   const t=el("div",{},el("div",{class:"nm",text:fullName(p)}));
   {const an=altName(p);if(an)t.append(el("div",{class:"mn",dir:"ltr",style:"text-align:end",text:an}))}
-  if(p.marriedName)t.append(el("div",{class:"mn",text:"(לאחר נישואין: "+p.marriedName+")"}));
+  if(p.marriedName&&!opts.mini)t.append(el("div",{class:"mn",text:"(לאחר נישואין: "+p.marriedName+")"}));
   const ls=lifespan(p);if(ls)t.append(el("div",{class:"yr",text:ls}));
-  if(!opts.small&&p.birthPlace)t.append(el("div",{class:"mn",text:p.birthPlace}));
+  if(!opts.small&&!opts.mini&&p.birthPlace)t.append(el("div",{class:"mn",text:p.birthPlace}));
   c.append(t);
   const go=()=>setFocus(id);c.addEventListener("click",e=>{e.stopPropagation();go()});c.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();go()}});
   return c}
-function renderTree(center){
-  const inner=$("#inner");inner.innerHTML="";const id=S.focus;if(!id||!P(id)){return}
-  const links=[];const show3=$("#opt-gen3").checked,showSib=$("#opt-sibs").checked,showGK=$("#opt-gk").checked;
-  // ancestors: slots arrays
-  const lvl1=[father(id),mother(id)];
-  const lvl2=[lvl1[0]&&father(lvl1[0]),lvl1[0]&&mother(lvl1[0]),lvl1[1]&&father(lvl1[1]),lvl1[1]&&mother(lvl1[1])];
-  const lvl3=[];lvl2.forEach(x=>{lvl3.push(x&&father(x),x&&mother(x))});
-  const addParent=(child,role)=>()=>openAddRelative(child,role);
-  const mkGen=(arr,cls,childArr)=>{const g=el("div",{class:"gen "+cls});arr.forEach((pid,i)=>{const child=childArr?childArr[Math.floor(i/2)]:id;const role=i%2===0?"father":"mother";
-      g.append(el("div",{class:"slot"},card(pid,{add:child&&P(child)?{label:role==="father"?"אב":"אם",fn:addParent(child,role)}:null})))});return g};
-  if(show3&&lvl3.some(Boolean))inner.append(mkGen(lvl3,"g3",lvl2));
-  if(lvl2.some(Boolean)||lvl1.some(Boolean))inner.append(mkGen(lvl2,"g2",lvl1));
-  inner.append(mkGen(lvl1,"g1",null));
-  // focus row
-  const row=el("div",{class:"row"});
-  const sibs=showSib?siblingsOf(id).sort(byBirth):[];
-  const fy=yearOf(P(id).birthDate)||0;
-  const older=sibs.filter(s=>(yearOf(P(s).birthDate)||9999)<fy),younger=sibs.filter(s=>!older.includes(s));
-  older.forEach(s=>row.append(card(s,{small:true})));
-  row.append(card(id,{focus:true}));
-  younger.forEach(s=>row.append(card(s,{small:true})));
-  const sf=spouseFams(id);
-  sf.forEach(f=>{const sp=spouseIn(f,id);row.append(card(sp,{add:{label:"בן/בת זוג",fn:()=>openAddRelative(id,"spouse",f.id)}}))});
-  if(!sf.length&&S.canWrite)row.append(card(null,{add:{label:"בן/בת זוג",fn:()=>openAddRelative(id,"spouse")}}));
-  inner.append(row);
-  // children rows
-  const kidsRow=el("div",{class:"row"});const gkRow=el("div",{class:"row"});let anyKids=false;
-  sf.forEach(f=>{const kids=(f.children||[]).filter(P).sort(byBirth);const grp=el("div",{class:"group","data-fam":f.id});
-    const sp=spouseIn(f,id);if(sf.length>1)grp.append(el("div",{class:"groupcap",text:sp?"עם "+shortName(P(sp)):"הורה יחיד"}));
-    const kd=el("div",{class:"kids"});kids.forEach(k=>{kd.append(card(k));anyKids=true});
-    if(S.canWrite)kd.append(card(null,{add:{label:"ילד/ה",fn:()=>openAddRelative(id,"child",f.id)}}));
-    grp.append(kd);kidsRow.append(grp);
-    if(showGK)kids.forEach(k=>{const gks=childrenOf(k).sort(byBirth);if(gks.length){const g2=el("div",{class:"group"},el("div",{class:"groupcap",text:"ילדי "+shortName(P(k))}),el("div",{class:"kids"},gks.map(g=>card(g,{small:true}))));gkRow.append(g2)}})});
-  if(!sf.length&&S.canWrite){kidsRow.append(card(null,{add:{label:"ילד/ה",fn:()=>openAddRelative(id,"child")}}))}
-  if(kidsRow.children.length)inner.append(kidsRow);
-  if(showGK&&gkRow.children.length)inner.append(gkRow);
-  // links
-  const svgNS="http://www.w3.org/2000/svg";const svg=document.createElementNS(svgNS,"svg");svg.setAttribute("class","links");inner.prepend(svg);
-  requestAnimationFrame(()=>{drawLinks(svg,inner);if(center)centerOn(id)})}
-function box(e,inner){let x=0,y=0,n=e;while(n&&n!==inner){x+=n.offsetLeft;y+=n.offsetTop;n=n.offsetParent}return{x,y,w:e.offsetWidth,h:e.offsetHeight}}
-function drawLinks(svg,inner){svg.innerHTML="";svg.setAttribute("width",inner.scrollWidth);svg.setAttribute("height",inner.scrollHeight);
-  const cardEl=id=>inner.querySelector(`.card[data-id="${CSS.escape(id)}"]`);
-  const families=new Set();inner.querySelectorAll(".card[data-id]").forEach(c=>{const id=c.dataset.id;(S.famc[id]||[]).forEach(f=>families.add(f))});
-  for(const fid of families){const f=S.fams[fid];if(!f)continue;const pe=[f.husb,f.wife].map(x=>x&&cardEl(x)).filter(Boolean);const ce=(f.children||[]).map(cardEl).filter(Boolean);
-    if(!pe.length||!ce.length)continue;
-    const pb=pe.map(e=>box(e,inner)),cb=ce.map(e=>box(e,inner));
-    const py=Math.max(...pb.map(b=>b.y+b.h));const cy=Math.min(...cb.map(b=>b.y));
-    if(cy<=py)continue;
-    const midY=py+(cy-py)/2;const px=pb.reduce((a,b)=>a+b.x+b.w/2,0)/pb.length;
-    let d="";pb.forEach(b=>{d+=`M${b.x+b.w/2},${b.y+b.h} V${midY} `});
-    if(pb.length===2)d+=`M${pb[0].x+pb[0].w/2},${midY} H${pb[1].x+pb[1].w/2} `;
-    const xs=cb.map(b=>b.x+b.w/2);const minX=Math.min(px,...xs),maxX=Math.max(px,...xs);
-    d+=`M${minX},${midY} H${maxX} `;cb.forEach(b=>{d+=`M${b.x+b.w/2},${midY} V${b.y} `});
-    const path=document.createElementNS("http://www.w3.org/2000/svg","path");path.setAttribute("d",d);if(f.uncertain)path.setAttribute("class","uncertain");svg.append(path)}
-  // couple connectors in focus row
-  const fc=inner.querySelector(".card.focus");if(fc){const fb=box(fc,inner);spouseFams(S.focus).forEach(f=>{const sp=spouseIn(f,S.focus);const se=sp&&cardEl(sp);if(!se)return;const sb=box(se,inner);const y=fb.y+fb.h/2;const x1=fb.x<sb.x?fb.x+fb.w:fb.x,x2=fb.x<sb.x?sb.x:sb.x+sb.w;const path=document.createElementNS("http://www.w3.org/2000/svg","path");path.setAttribute("d",`M${x1},${y} H${x2}`);svg.append(path);
-      const grp=inner.querySelector(`.group[data-fam="${CSS.escape(f.id)}"]`);if(grp){const kids=[...grp.querySelectorAll(".kids > .card")];if(kids.length){const kb=kids.map(k=>box(k,inner));const sx=(x1+x2)/2;const top=Math.min(...kb.map(b=>b.y));const midY=y+(top-y)*0.62;let d=`M${sx},${y} V${midY} `;const xs=kb.map(b=>b.x+b.w/2);d+=`M${Math.min(sx,...xs)},${midY} H${Math.max(sx,...xs)} `;kb.forEach(b=>d+=`M${b.x+b.w/2},${midY} V${b.y} `);const p2=document.createElementNS("http://www.w3.org/2000/svg","path");p2.setAttribute("d",d);svg.append(p2)}}})}}
+/* ---------- tree chart (MyHeritage-style family view) ---------- */
+const CW=150,CH=60,HG=14,SG=12,VG=104;
+const TOPT={up:+(LS.get("ft.up")||4),down:+(LS.get("ft.down")||2),cousins:LS.get("ft.cousins")!=="0"};
+function unitCards(pid){const out=[pid];for(const f of spouseFams(pid)){const s=spouseIn(f,pid);if(s&&!out.includes(s))out.push(s)}return out}
+const emptyBox=()=>({items:[],lines:[],minX:-CW/2,maxX:CW/2});
+function addBox(R,s,dx,dy){s.items.forEach(it=>R.items.push({...it,x:it.x+dx,y:it.y+dy}));s.lines.forEach(l=>R.lines.push(l.map(([p,q])=>[p+dx,q+dy])));R.minX=Math.min(R.minX,dx+s.minX);R.maxX=Math.max(R.maxX,dx+s.maxX)}
+/* ancestors above a card. Coordinates relative to the card (centre x, top y). The card itself is not included. */
+function pediLayout(pid,levels){const R=emptyBox();if(levels<=0)return R;const f=father(pid),m=mother(pid);
+  if(!f&&!m&&!S.canWrite)return R;
+  const pf=f?pediLayout(f,levels-1):emptyBox(),pm=m?pediLayout(m,levels-1):emptyBox();
+  const D=Math.max(CW+SG,pf.maxX-pm.minX+HG),fc=-D/2,mc=D/2,y=-VG;
+  R.items.push(f?{id:f,x:fc,y}:{ph:{child:pid,role:"father"},x:fc,y});R.items.push(m?{id:m,x:mc,y}:{ph:{child:pid,role:"mother"},x:mc,y});
+  addBox(R,pf,fc,y);addBox(R,pm,mc,y);
+  R.lines.push([[fc+CW/2,y+CH/2],[mc-CW/2,y+CH/2]],[[0,y+CH/2],[0,0]]);
+  return R}
+/* descendants: node={cards,gen,line,kids,phantom} */
+function buildNode(cards,gen,line,F,D){const node={cards,gen,line,kids:[]};
+  for(const k of childrenOf(cards[0]).sort(byBirth)){const kg=gen-1;if(kg<-TOPT.down)continue;let ln=line;
+    if(gen===1&&line==="direct")ln=(k===F)?"direct":"sibling";
+    if(ln==="uncle"&&kg<0)continue;if(ln==="sibling"&&kg<-1)continue;
+    node.kids.push(buildNode(unitCards(k),kg,ln,F,D))}
+  return node}
+function layNode(node,ped){const R={items:[],lines:[],minX:Infinity,maxX:-Infinity};
+  if(node.phantom){return{items:[],lines:[],minX:0,maxX:0,phantom:node.phantom,anchorChild:0}}
+  let xs;const n=node.cards.length;
+  if(ped>0&&n<=2){const pe=node.cards.map(id=>pediLayout(id,ped));
+    if(n===2){const Dd=Math.max(CW+SG,pe[0].maxX-pe[1].minX+HG);xs=[-Dd/2,Dd/2]}else xs=[0];
+    pe.forEach((s,i)=>addBox(R,s,xs[i],0))}
+  else{const w=n*CW+(n-1)*SG;xs=node.cards.map((_,i)=>-w/2+CW/2+i*(CW+SG))}
+  node.cards.forEach((id,i)=>{R.items.push({id,x:xs[i],y:0});R.minX=Math.min(R.minX,xs[i]-CW/2);R.maxX=Math.max(R.maxX,xs[i]+CW/2)});
+  for(let i=1;i<n;i++)R.lines.push([[xs[i-1]+CW/2,CH/2],[xs[i]-CW/2,CH/2]]);
+  const mid=n>1?(xs[0]+xs[1])/2:xs[0];
+  if(node.kids.length){const subs=node.kids.map(k=>layNode(k,0));let cur=0;const offs=[];
+    subs.forEach(s=>{if(s.phantom){offs.push(cur);return}offs.push(cur-s.minX);cur+=s.maxX-s.minX+HG});
+    const total=Math.max(0,cur-HG),shift=mid-total/2,by=VG-26,xsC=[];
+    subs.forEach((s,i)=>{const ox=offs[i]+shift;if(s.phantom){R.momBus={y:by,from:mid,id:s.phantom};return}
+      addBox(R,s,ox,VG);xsC.push(ox+s.anchorChild)});
+    R.lines.push([[mid,CH],[mid,by]]);if(xsC.length){const lo=Math.min(mid,...xsC),hi=Math.max(mid,...xsC);if(hi>lo)R.lines.push([[lo,by],[hi,by]]);xsC.forEach(x=>R.lines.push([[x,by],[x,VG]]))}
+    subs.forEach((s,i)=>{if(s.momBus&&!R.momBus)R.momBus={...s.momBus,from:s.momBus.from+offs[i]+shift,y:s.momBus.y+VG}})}
+  R.anchorChild=xs[0];return R}
+function buildLayout(F){const D=new Set([F,...ancestorsMap(F).keys()]);const fa=father(F),mo=mother(F);const up=TOPT.up;
+  const topNode=(fam,momPhantom)=>{const node={cards:[fam.husb,fam.wife].filter(x=>x&&P(x)),gen:2,kids:[]};
+    let kids=(fam.children||[]).filter(P).sort(byBirth).filter(k=>D.has(k)||TOPT.cousins);
+    // the direct line sits on the inner edge: paternal side -> last, maternal side -> first
+    const dk=kids.filter(k=>D.has(k)),ok=kids.filter(k=>!D.has(k));kids=momPhantom?[...dk,...ok]:[...ok,...dk];
+    for(const k of kids){if(momPhantom&&k===mo){node.kids.push({phantom:k});continue}
+      node.kids.push(buildNode(unitCards(k),1,D.has(k)?"direct":"uncle",F,D))}
+    if(!node.cards.length)node.cards=[];return node};
+  const blocks=[];
+  if(fa||mo){const PGF=fa&&birthFam(fa),MGF=mo&&birthFam(mo);
+    if(fa){if(PGF&&[PGF.husb,PGF.wife].some(x=>x&&P(x)))blocks.push({node:topNode(PGF,false),ped:up-2,gen:2});
+      else blocks.push({node:buildNode(unitCards(fa),1,"direct",F,D),ped:0,gen:1,pedOne:fa});
+      if(mo){if(MGF&&[MGF.husb,MGF.wife].some(x=>x&&P(x)))blocks.push({node:topNode(MGF,true),ped:up-2,gen:2});else blocks.push({pedFor:mo,gen:1})}}
+    else{if(MGF&&[MGF.husb,MGF.wife].some(x=>x&&P(x)))blocks.push({node:topNode(MGF,false),ped:up-2,gen:2});
+      else blocks.push({node:buildNode(unitCards(mo),1,"direct",F,D),ped:0,gen:1,pedOne:mo})}}
+  else blocks.push({node:buildNode(unitCards(F),0,"direct",F,D),ped:0,gen:0,pedOne:F});
+  const all={items:[],lines:[]};let cur=0;
+  for(const b of blocks){const oy=(2-b.gen)*VG;
+    if(b.pedFor){ // mother without known parents: her "+" parents go right of everything, joined to her card
+      const real=all.items.find(i=>i.id===b.pedFor);if(!real)continue;const pr=pediLayout(b.pedFor,up-1);if(!pr.items.length)continue;
+      const upper=all.items.filter(i=>i.y<real.y).map(i=>i.x+CW/2);const ox=Math.max(real.x,(upper.length?Math.max(...upper):-Infinity)+HG-pr.minX);
+      pr.lines.pop();addBox(all,pr,ox,real.y);all.lines.push([[ox,real.y-VG+CH/2],[ox,real.y-14],[real.x,real.y-14],[real.x,real.y]]);continue}
+    const L=layNode(b.node,Math.max(0,b.ped));
+    if(b.pedOne){const it0=L.items.find(i=>i.id===b.pedOne&&i.y===0);if(it0)addBox(L,pediLayout(b.pedOne,up-(2-b.gen)),it0.x,0)}
+    const ox=cur-L.minX;addBox(all,L,ox,oy);if(L.momBus)all.momBus={...L.momBus,from:L.momBus.from+ox,y:L.momBus.y+oy};cur+=L.maxX-L.minX+HG*3}
+  const momReal=all.items.find(i=>i.id===mo);
+  if(all.momBus&&momReal){const b=all.momBus;all.lines.push([[Math.min(b.from,momReal.x),b.y],[Math.max(b.from,momReal.x),b.y]],[[momReal.x,b.y],[momReal.x,momReal.y]])}
+  const seen=new Set();all.items=all.items.filter(i=>{if(!i.id)return true;if(seen.has(i.id))return false;seen.add(i.id);return true});
+  return all}
+function renderTree(center){const inner=$("#inner");inner.innerHTML="";const F=S.focus;if(!F||!P(F))return;
+  const L=buildLayout(F);if(!L.items.length)return;
+  let minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity;L.items.forEach(i=>{minX=Math.min(minX,i.x-CW/2);maxX=Math.max(maxX,i.x+CW/2);minY=Math.min(minY,i.y);maxY=Math.max(maxY,i.y+CH)});
+  const pad=40,W=maxX-minX+pad*2,H=maxY-minY+pad*2;
+  const X=x=>W-(x-minX+pad),Y=y=>y-minY+pad;     // mirrored for right-to-left: father's side on the right
+  Object.assign(inner.style,{width:W+"px",height:H+"px",padding:"0"});
+  const svgNS="http://www.w3.org/2000/svg",svg=document.createElementNS(svgNS,"svg");svg.setAttribute("class","links");svg.setAttribute("width",W);svg.setAttribute("height",H);
+  let d="";L.lines.forEach(pts=>pts.forEach(([x,y],k)=>{d+=(k?"L":"M")+X(x).toFixed(1)+","+Y(y).toFixed(1)+" "}));
+  const path=document.createElementNS(svgNS,"path");path.setAttribute("d",d);svg.append(path);inner.append(svg);
+  for(const it of L.items){let c;
+    if(it.ph){c=el("button",{class:"card mini ph",title:it.ph.role==="father"?"הוספת אב":"הוספת אם"},"+ "+(it.ph.role==="father"?"אב":"אם"));c.addEventListener("click",e=>{e.stopPropagation();openAddRelative(it.ph.child,it.ph.role)})}
+    else c=card(it.id,{focus:it.id===F,mini:true});
+    c.style.left=(X(it.x)-CW/2)+"px";c.style.top=Y(it.y)+"px";inner.append(c)}
+  if(center)requestAnimationFrame(()=>centerOn(F))}
+function drawLinks(){}
+
 function applyT(){$("#inner").style.transform=`translate(${S.tx}px,${S.ty}px) scale(${S.sc})`}
 function centerOn(id){const inner=$("#inner"),cv=$("#canvas");const c=inner.querySelector(`.card[data-id="${CSS.escape(id)}"]`);if(!c)return;const b=box(c,inner);
   const W=inner.scrollWidth,H=inner.scrollHeight,cw=cv.clientWidth,ch=cv.clientHeight-50;
@@ -486,7 +523,8 @@ function centerOn(id){const inner=$("#inner"),cv=$("#canvas");const c=inner.quer
   cv.addEventListener("wheel",e=>{e.preventDefault();const r=cv.getBoundingClientRect();zoomAt(e.clientX-r.left,e.clientY-r.top,e.deltaY<0?1.12:1/1.12)},{passive:false});
   $("#z-in").onclick=()=>zoomAt(cv.clientWidth/2,cv.clientHeight/2,1.2);$("#z-out").onclick=()=>zoomAt(cv.clientWidth/2,cv.clientHeight/2,1/1.2);$("#z-fit").onclick=()=>centerOn(S.focus);})();
 function zoomAt(x,y,k){const ns=Math.max(.25,Math.min(2.2,S.sc*k));S.tx=x-(x-S.tx)*(ns/S.sc);S.ty=y-(y-S.ty)*(ns/S.sc);S.sc=ns;applyT()}
-["opt-sibs","opt-gk","opt-gen3"].forEach(i=>$("#"+i).addEventListener("change",()=>renderTree(true)));
+$("#opt-up").value=TOPT.up;$("#opt-down").value=TOPT.down;$("#opt-cous").checked=TOPT.cousins;
+$("#opt-up").onchange=e=>{TOPT.up=+e.target.value;LS.set("ft.up",TOPT.up);renderTree(true)};$("#opt-down").onchange=e=>{TOPT.down=+e.target.value;LS.set("ft.down",TOPT.down);renderTree(true)};$("#opt-cous").onchange=e=>{TOPT.cousins=e.target.checked;LS.set("ft.cousins",TOPT.cousins?"1":"0");renderTree(true)};
 const NAV={back:[],fwd:[]};
 function updNav(){const b=$("#nav-back"),f=$("#nav-fwd");if(b)b.disabled=!NAV.back.length;if(f)f.disabled=!NAV.fwd.length}
 function goBack(){const id=NAV.back.pop();if(!id)return;NAV.fwd.push(S.focus);setFocus(id,true)}
