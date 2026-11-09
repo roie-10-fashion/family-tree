@@ -128,6 +128,7 @@ h1,h2,h3{font-family:var(--font-display);text-wrap:balance;margin:0}
 .zoom{position:absolute;bottom:14px;inset-inline-end:14px;display:flex;flex-direction:column;gap:6px;z-index:5}
 .zoom button{width:36px;height:36px;border-radius:8px;border:1px solid var(--line);background:var(--surface);font-weight:700;font-size:18px;box-shadow:var(--shadow)}
 .chartopts{position:absolute;top:12px;inset-inline-end:14px;z-index:5;display:flex;gap:12px;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:8px 14px;font-size:15px;box-shadow:var(--shadow);align-items:center}
+.pathbar{position:absolute;top:62px;left:50%;transform:translateX(-50%);z-index:6;background:var(--surface);border:2px solid var(--accent);border-radius:12px;padding:8px 14px;gap:12px;align-items:center;box-shadow:var(--shadow);font-size:16px}
 .chartnav{position:absolute;top:12px;inset-inline-start:14px;z-index:5;display:flex;gap:6px}.chartnav .btn{box-shadow:var(--shadow)}.chartnav .btn:disabled{opacity:.45;cursor:default}
 .chartopts label{display:flex;gap:4px;align-items:center}
 
@@ -246,6 +247,7 @@ dialog::backdrop{background:rgba(10,20,20,.45)}
     <div class="canvas" id="canvas">
       <div class="inner" id="inner"></div>
     </div>
+    <div class="pathbar" id="pathbar" style="display:none"></div>
     <div class="chartnav">
       <button class="btn small" id="nav-back" disabled title="חזרה לאדם הקודם">→ חזרה</button>
       <button class="btn small" id="nav-fwd" disabled title="קדימה">קדימה ←</button>
@@ -507,8 +509,20 @@ function buildLayout(F){const D=new Set([F,...ancestorsMap(F).keys()]);const fa=
   if(all.momBus&&momReal){const b=all.momBus;all.lines.push([[Math.min(b.from,momReal.x),b.y],[Math.max(b.from,momReal.x),b.y]],[[momReal.x,b.y],[momReal.x,momReal.y]])}
   const seen=new Set();all.items=all.items.filter(i=>{if(!i.id)return true;if(seen.has(i.id))return false;seen.add(i.id);return true});
   return all}
+function buildPathLayout(pv){const all={items:[],lines:[]};const top=pv.commons.length>1?pv.commons.slice(0,2):[pv.lca];
+  const gap=CW*1.6;const xs=top.length===2?[-(CW+SG)/2,(CW+SG)/2]:[0];top.forEach((id,i)=>all.items.push({id,x:xs[i],y:0}));
+  if(top.length===2)all.lines.push([[xs[0]+CW/2,CH/2],[xs[1]-CW/2,CH/2]]);const mid=top.length===2?0:xs[0];
+  const colA=pv.chainA.slice().reverse().slice(1),colB=pv.chainB.slice().reverse().slice(1);   // from the common ancestor down
+  const xA=-gap/2-CW/2,xB=gap/2+CW/2;const by=VG-26;const heads=[];
+  const col=(arr,x,dir)=>{arr.forEach((id,i)=>{const y=(i+1)*VG;all.items.push({id,x,y});const sp=spouseFams(id).map(f=>spouseIn(f,id)).find(Boolean);if(sp&&!pv.chainA.includes(sp)&&!pv.chainB.includes(sp)){const sx=x+dir*(CW+SG);all.items.push({id:sp,x:sx,y});all.lines.push([[Math.min(x,sx)+CW/2,y+CH/2],[Math.max(x,sx)-CW/2,y+CH/2]])}
+      if(i>0)all.lines.push([[x,y-VG+CH],[x,y]])});if(arr.length)heads.push(x)};
+  col(colA,xA,-1);col(colB,xB,1);
+  if(heads.length){all.lines.push([[mid,CH],[mid,by]],[[Math.min(mid,...heads),by],[Math.max(mid,...heads),by]]);heads.forEach(x=>all.lines.push([[x,by],[x,VG]]))}
+  const seen=new Set();all.items=all.items.filter(i=>!seen.has(i.id)&&seen.add(i.id));return all}
 function renderTree(center){const inner=$("#inner");inner.innerHTML="";const F=S.focus;if(!F||!P(F))return;
-  const L=buildLayout(F);if(!L.items.length)return;
+  const pv=S.pathView;const bar=$("#pathbar");
+  if(pv){bar.innerHTML="";bar.append(el("span",{},`הקשר בין ${shortName(P(pv.a))} ל${shortName(P(pv.b))}: `,el("strong",{text:pv.label})),el("button",{class:"btn small",onclick:()=>{S.pathView=null;renderTree(true)}},"חזרה לעץ הרגיל"));bar.style.display="flex"}else bar.style.display="none";
+  const L=pv?buildPathLayout(pv):buildLayout(F);if(!L.items.length)return;
   let minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity;L.items.forEach(i=>{minX=Math.min(minX,i.x-CW/2);maxX=Math.max(maxX,i.x+CW/2);minY=Math.min(minY,i.y);maxY=Math.max(maxY,i.y+CH)});
   const pad=40,W=maxX-minX+pad*2,H=maxY-minY+pad*2;
   const X=x=>W-(x-minX+pad),Y=y=>y-minY+pad;     // mirrored for right-to-left: father's side on the right
@@ -546,7 +560,7 @@ function goFwd(){const id=NAV.fwd.pop();if(!id)return;NAV.back.push(S.focus);set
 function goHome(){const r=(S.meta.rootPerson&&P(S.meta.rootPerson))?S.meta.rootPerson:S.meta.focusDefault;if(r)setFocus(r)}
 function openPanel(id){if(!P(id))return;S.sel=id;document.querySelectorAll(".card.sel").forEach(x=>x.classList.remove("sel"));document.querySelectorAll(`.card[data-id="${CSS.escape(id)}"]`).forEach(x=>x.classList.add("sel"));renderPanel();const pn=$("#panel");pn.classList.add("open");pn.scrollTop=0}
 function closePanel(){$("#panel").classList.remove("open");S.sel=null;document.querySelectorAll(".card.sel").forEach(x=>x.classList.remove("sel"))}
-function setFocus(id,nav){if(!P(id))return;if(!nav&&S.focus&&S.focus!==id){NAV.back.push(S.focus);NAV.fwd=[]}updNav();S.focus=id;try{history.replaceState(null,"","#"+id)}catch(e){location.hash=id}
+function setFocus(id,nav){if(!P(id))return;S.pathView=null;if(!nav&&S.focus&&S.focus!==id){NAV.back.push(S.focus);NAV.fwd=[]}updNav();S.focus=id;try{history.replaceState(null,"","#"+id)}catch(e){location.hash=id}
   if($("#panel").classList.contains("open"))S.sel=id;
   if(S.view!=="tree")renderPanel();else renderAll(true)}
 function restoreHash(){const h=(location.hash||"").slice(1);if(/^[A-Za-z0-9]+$/.test(h))S.focus=h}
@@ -785,7 +799,8 @@ function openRel(preB){let A=S.meta.rootPerson&&P(S.meta.rootPerson)?S.meta.root
     out.append(el("div",{class:"hint",text:`${fullName(P(B))} הוא/היא ביחס ל${fullName(P(A))}:`}),el("div",{class:"big",text:r.label}));
     if(r.blood){const lca=P(r.lca);out.append(el("div",{class:"hint",text:`אב/אם קדמון משותף: ${fullName(lca)}${r.commons.length>1?" ו"+fullName(P(r.commons.find(x=>x!==r.lca))):""}`}));
       const col=(t,ch)=>el("div",{},el("h4",{text:t}),el("ol",{},ch.slice().reverse().map(x=>el("li",{},el("a",{href:"#"+x,onclick:e=>{e.preventDefault();closeDialog();switchView("tree");setFocus(x)}},fullName(P(x))),el("span",{class:"hint",text:" "+lifespan(P(x))})))));
-      out.append(el("div",{class:"chain"},col("הקו של "+shortName(P(A)),r.chainA),col("הקו של "+shortName(P(B)),r.chainB)))}
+      out.append(el("div",{class:"chain"},col("הקו של "+shortName(P(A)),r.chainA),col("הקו של "+shortName(P(B)),r.chainB)));
+      out.append(el("div",{class:"foot",style:"margin-top:10px"},el("button",{class:"btn primary",onclick:()=>{S.pathView={a:A,b:B,label:r.label,lca:r.lca,commons:r.commons,chainA:r.chainA,chainB:r.chainB};closeDialog();closePanel();if(S.view!=="tree")switchView("tree");renderTree(true)}},"🌳 הצגה בעץ")))}
     else if(r.path){out.append(el("ol",{},r.path.map(x=>el("li",{text:fullName(P(x))}))))}};
   const pa=picker("rel-a","אדם ראשון…",v=>{A=v;run()},A),pb=picker("rel-b","אדם שני…",v=>{B=v;run()},B);
   openDialog(el("h2",{text:"מה הקשר?"}),el("div",{class:"form"},el("label",{},"אדם ראשון",pa),el("label",{},"אדם שני",pb)),out,el("div",{class:"foot"},el("button",{class:"btn",onclick:closeDialog},"סגירה")));run()}
