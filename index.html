@@ -106,6 +106,7 @@ h1,h2,h3{font-family:var(--font-display);text-wrap:balance;margin:0}
 .card.focus{outline:3px solid var(--accent);outline-offset:2px;width:180px}
 .card.small{width:132px;min-height:60px;opacity:.95}
 .card.uncertain{border-style:dashed}
+.tl{display:flex;flex-direction:column}.tl-row{display:grid;grid-template-columns:64px 1fr;gap:10px;padding:9px 0;border-bottom:1px solid var(--line)}.tl-row:last-child{border-bottom:0}.tl-yr{font-size:20px;font-weight:700;line-height:1.1}.tl-row:not(.main) .tl-yr{font-size:17px;font-weight:600;color:var(--muted,#666)}.tl-t{font-weight:700;margin-bottom:2px}.tl-b .chips{margin:2px 0}
 .holo-mark{position:absolute;top:4px;inset-inline-start:6px;font-size:13px;line-height:1;color:#c99a06}
 .pill.holo{background:#fff6d6;color:#7a5a00;border-color:#e8c860}
 .card.uncertain::after{content:"משוער";position:absolute;bottom:4px;inset-inline-end:6px;font-size:10px;color:var(--warn);font-weight:700}
@@ -571,6 +572,33 @@ window.addEventListener("hashchange",()=>{const h=location.hash.slice(1);if(h&&P
 
 /* ---------- profile panel ---------- */
 function chip(id,label){const p=P(id);return el("button",{class:"chip",onclick:()=>{setFocus(id);openPanel(id)},title:label||""},el("span",{class:"dot "+(p?.sex||"")}),shortName(p)+(label?` · ${label}`:""),el("small",{text:" "+lifespan(p)}))}
+
+/* ---------- timeline (עובדות) ---------- */
+const MON={JAN:1,FEB:2,MAR:3,APR:4,MAY:5,JUN:6,JUL:7,AUG:8,SEP:9,OCT:10,NOV:11,DEC:12};
+function dKey(d){if(!d)return null;const s=String(d).toUpperCase();const y=s.match(/\d{4}/);if(!y)return null;const m=s.match(/\b(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\b/);const dd=s.match(/\b(\d{1,2})\s+(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\b/);return +y[0]*10000+(m?MON[m[1]]:0)*100+(dd?+dd[1]:0)}
+function ageAt(p,d){const b=dKey(p.birthDate),e=dKey(d);if(!b||!e)return"";let a=Math.floor(e/10000)-Math.floor(b/10000);const bm=b%10000,em=e%10000;if(bm&&em&&em<bm)a--;return a>=0&&a<130?(/ABT|EST|CAL|BET/i.test(p.birthDate+" "+d)?"גיל ~"+a:"גיל "+a):""}
+function renderTimeline(id){const p=P(id);const ev=[];
+  const push=(o)=>ev.push({...o,k:dKey(o.date)});
+  push({t:"לידה",date:p.birthDate,place:p.birthPlace,ord:0});
+  spouseFams(id).forEach(f=>{const sp=spouseIn(f,id);
+    push({t:f.divorced?"נישואין (התגרשו)":"נישואין",who:sp,date:f.marrDate,place:f.marrPlace,ord:1,after:f.children?.map(c=>dKey(P(c)?.birthDate)).filter(Boolean).sort()[0]});
+    (f.children||[]).filter(P).forEach(c=>{const ch=P(c);push({t:gword(ch,"הולדת הבן","הולדת הבת","הולדת ילד/ה"),who:c,date:ch.birthDate,place:ch.birthPlace,ord:2})});
+    if(sp&&(P(sp).deathDate))push({t:gword(P(sp),"פטירת בן הזוג","פטירת בת הזוג","פטירת בן/בת הזוג"),who:sp,date:P(sp).deathDate,place:P(sp).deathPlace,ord:3})});
+  parentsOf(id).forEach(x=>{const q=P(x);if(q.deathDate&&(!p.deathDate||dKey(q.deathDate)<=dKey(p.deathDate)))push({t:gword(q,"פטירת האב","פטירת האם","פטירת הורה"),who:x,date:q.deathDate,place:q.deathPlace,ord:3})});
+  if(p.deceased||p.deathDate)push({t:p.holocaust?gword(p,"נספה בשואה","נספתה בשואה","נספה/תה בשואה"):"פטירה",date:p.deathDate,place:p.deathPlace,ord:8});
+  if(p.burialPlace)push({t:"קבורה",date:"",place:p.burialPlace,ord:9});
+  // sort: dated by date; undated stay in logical order (birth first, death/burial last)
+  ev.forEach(e=>{e.s=e.k??(e.ord===0?0:e.ord>=8?99999999+e.ord:(e.after?e.after-1:50000000+e.ord))});
+  ev.sort((a,b)=>a.s-b.s||a.ord-b.ord);
+  const box=el("div",{class:"sect"},el("h3",{text:"עובדות"}));const ul=el("div",{class:"tl"});
+  ev.forEach(e=>{if(e.ord===0&&!e.date&&!e.place)return;
+    const yr=e.k?String(Math.floor(e.k/10000)):"—";
+    const right=el("div",{class:"tl-y"},el("div",{class:"tl-yr",text:yr}),e.ord&&e.ord<8&&e.date?el("div",{class:"hint",text:ageAt(p,e.date)}):null);
+    const body=el("div",{class:"tl-b"},el("div",{class:"tl-t",text:e.t+(e.who?":":"")}));
+    if(e.who)body.append(el("div",{class:"chips"},chip(e.who)));
+    const sub=[fmtDate(e.date),e.place].filter(Boolean);if(sub.length)body.append(el("div",{class:"hint",text:sub.join(" · ")}));
+    ul.append(el("div",{class:"tl-row"+(e.ord===0||e.ord>=8?" main":"")},right,body))});
+  box.append(ul);return box}
 function renderPanel(){
   const pn=$("#panel");pn.innerHTML="";const id=S.sel;const p=P(id);
   if(!p){closePanel();return}
@@ -581,9 +609,8 @@ function renderPanel(){
   else pn.append(el("div",{class:"actions"},el("button",{class:"btn small",onclick:()=>openRel(id)},"מה הקשר אליו?")));
   // facts
   const facts=el("dl",{class:"facts"});const add=(k,v)=>{if(v){facts.append(el("dt",{text:k}),el("dd",{text:v}))}};
-  add("לידה",[fmtDate(p.birthDate),p.birthPlace].filter(Boolean).join(", "));
-  if(p.deceased||p.deathDate)add("פטירה",[fmtDate(p.deathDate),p.deathPlace].filter(Boolean).join(", ")||"נפטר/ה");
-  add("קבורה",p.burialPlace);add("מקצוע",p.occupation);add("מגורים",p.residence);
+  add("מקצוע",p.occupation);add("מגורים",p.residence);
+  pn.append(renderTimeline(id));
   if(facts.children.length)pn.append(el("div",{class:"sect"},el("h3",{text:"פרטים"}),facts));
   // photos
   const ph=(p.photos||[]).filter(isImgItem);
