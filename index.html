@@ -142,7 +142,9 @@ h1,h2,h3{font-family:var(--font-display);text-wrap:balance;margin:0}
 .sect h3{font-size:16px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center}
 .note{white-space:pre-wrap;background:var(--bg);border-radius:8px;padding:10px;font-size:14px}
 .pill{display:inline-block;font-size:11px;font-weight:700;padding:1px 8px;border-radius:999px;background:color-mix(in srgb,var(--warn) 20%,var(--surface));color:var(--warn)}
-.photos{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.photos{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+.thumb{position:relative;padding:0;border:2px solid transparent;border-radius:9px;background:var(--bg);overflow:hidden;cursor:zoom-in;aspect-ratio:1;display:block;min-width:0}.thumb.primary{border-color:var(--accent)}.thumb img{width:100%;height:100%;object-fit:cover;display:block;border-radius:0}.thumb .badge{position:absolute;bottom:4px;inset-inline-start:4px;background:var(--accent);color:#fff;font-size:10px;font-weight:700;padding:1px 6px;border-radius:6px}
+dialog.wide{width:min(900px,96vw)}
 .photos figure{margin:0;position:relative}
 .photos img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:8px;cursor:zoom-in;background:var(--bg)}
 .photos .ph-tools{position:absolute;top:4px;inset-inline-start:4px;display:flex;gap:3px}
@@ -306,7 +308,7 @@ function shortName(p){if(!p)return"?";const n=names(p);const g=(n.gH||n.gE).spli
 function lifespan(p){const b=yearOf(p.birthDate),d=yearOf(p.deathDate);if(b&&d)return`${b}–${d}`;if(b)return p.deceased?`${b}–?`:`נ. ${b}`;if(d)return`נפ׳ ${d}`;return p.deceased?"נפטר/ה":""}
 function initials(p){const n=fullName(p).replace(/[()"'?]/g,"").trim().split(/\s+/);return((n[0]||"")[0]||"?")+((n[1]||"")[0]||"")}
 const norm=s=>String(s||"").toLowerCase().replace(/[֑-ׇ]/g,"").replace(/[׳'"״().,\-]/g," ").replace(/\s+/g," ").trim();
-function primaryPhoto(p){const ph=(p.photos||[]);const pr=ph.find(x=>x.primary)||ph[0];return pr?pr.driveId:null}
+function primaryPhoto(p){const ph=(p.photos||[]).filter(isImgItem);const pr=ph.find(x=>x.primary)||ph[0];return pr?pr.driveId:null}
 function avatar(p,cls=""){const a=el("div",{class:`avatar ${p?.sex||""} ${cls}`});const u=p&&primaryPhoto(p);if(u)a.append(driveImg(u,""));else a.textContent=initials(p);return a}
 const gword=(p,m,f,u)=>p?.sex==="M"?m:p?.sex==="F"?f:(u||m+"/"+f);
 
@@ -361,8 +363,12 @@ function showSignIn(expired){const L=$("#loading");L.style.display="grid";L.inne
     el("button",{class:"btn primary",onclick:async()=>{try{await signIn();start()}catch(e){toast("ההתחברות לא הושלמה.",true)}}},"התחברות עם Google")))}
 async function boot(){restoreHash();await initAuth();if(G.token&&Date.now()<G.exp)start();else showSignIn(false)}
 async function start(){const L=$("#loading");L.style.display="grid";L.textContent="טוען את העץ מ-Google Drive…";
-  try{await loadData();S.mode="db";S.canWrite=true;applyWriteUI();afterData();$("#btn-out").style.display=""}
+  try{await loadData();migrateFiles();S.mode="db";S.canWrite=true;applyWriteUI();afterData();$("#btn-out").style.display=""}
   catch(e){if(!(e instanceof NeedAuth)){L.textContent="לא הצלחתי לטעון את הנתונים: "+(e.message||e)}}}
+function migrateFiles(){let changed=false;for(const p of Object.values(S.people)){const bad=(p.photos||[]).filter(x=>!isImgItem(x));if(!bad.length)continue;
+    const photos=(p.photos||[]).filter(isImgItem);if(photos.length&&!photos.some(x=>x.primary))photos[0]={...photos[0],primary:true};
+    S.people[p.id]={...p,photos,docs:[...(p.docs||[]),...bad.map(x=>({driveId:x.driveId,title:x.caption||"מסמך",date:"",note:"",contentType:x.mime,added:new Date().toISOString().slice(0,10)}))],updatedAt:Date.now()};changed=true}
+  if(changed)queueSave()}
 function applyData(d){S.people={};for(const[k,p]of Object.entries(d.people||{}))S.people[k]={...p,id:k};S.fams={};for(const[k,f]of Object.entries(d.families||{}))S.fams[k]={...f,id:k};
   S.research={};for(const[k,r]of Object.entries(d.research||{}))S.research[k]={...r,id:k};S.meta=d.meta||{};G.deleted={people:{},families:{},research:{},...(d.deleted||{})};G.folders=d.folders||{}}
 function packData(){const strip=o=>{const out={};for(const[k,v]of Object.entries(o)){const x={...v};delete x.id;out[k]=x}return out};
@@ -552,15 +558,15 @@ function renderPanel(){
   add("קבורה",p.burialPlace);add("מקצוע",p.occupation);add("מגורים",p.residence);
   if(facts.children.length)pn.append(el("div",{class:"sect"},el("h3",{text:"פרטים"}),facts));
   // photos
-  const ph=p.photos||[];
-  if(ph.length){const g=el("div",{class:"photos"});ph.forEach((x,i)=>{const fig=el("figure",{},(()=>{const im=driveImg(x.driveId,x.caption||fullName(p));im.onclick=()=>openLightbox(x,p);return im})());
-      if(S.canWrite)fig.append(el("div",{class:"ph-tools"},x.primary?null:el("button",{onclick:()=>setPrimaryPhoto(id,i)},"ראשית"),el("button",{onclick:()=>removePhoto(id,i)},"הסר")));g.append(fig)});
-    pn.append(el("div",{class:"sect"},el("h3",{text:"תמונות"}),g))}
+  const ph=(p.photos||[]).filter(isImgItem);
+  if(ph.length){const g=el("div",{class:"photos"});ph.forEach((x,i)=>{const im=driveImg(x.driveId,x.caption||fullName(p));
+      const fig=el("button",{class:"thumb"+(x.primary?" primary":""),title:x.caption||"",onclick:()=>openGallery(id,i)},im);if(x.primary)fig.append(el("span",{class:"badge",text:"ראשית"}));g.append(fig)});
+    pn.append(el("div",{class:"sect"},el("h3",{text:`תמונות (${ph.length})`}),g))}
   const dc=p.docs||[];
   if(dc.length){const s=el("div",{class:"sect"},el("h3",{text:`מסמכים (${dc.length})`}));const ul=el("div",{class:"docs"});
     dc.slice().sort((a,b)=>String(a.date||"").localeCompare(String(b.date||""))).forEach(d=>{const i=dc.indexOf(d);const isImg=/^image\//.test(d.contentType||"");
       const row=el("div",{class:"docrow"},el("span",{class:"docicon",text:isImg?"🖼":"📄"}),
-        el("div",{class:"docmain"},isImg?el("button",{class:"doclink",onclick:()=>openLightbox({driveId:d.driveId,caption:d.title},p)},d.title||"מסמך"):el("a",{class:"doclink",href:"https://drive.google.com/file/d/"+d.driveId+"/view",target:"_blank",rel:"noopener"},d.title||"מסמך"),
+        el("div",{class:"docmain"},isImg?el("button",{class:"doclink",onclick:()=>openLightbox({driveId:d.driveId,caption:d.title},p)},d.title||"מסמך"):el("button",{class:"doclink",onclick:()=>openDriveFile(d.driveId,d.title)},d.title||"מסמך"),
           el("div",{class:"hint",text:[fmtDate(d.date),d.note].filter(Boolean).join(" · ")})),
         S.canWrite?el("button",{class:"btn small",onclick:()=>openDocEdit(id,i)},"עריכה"):null);ul.append(row)});
     s.append(ul);pn.append(s)}
@@ -584,13 +590,30 @@ function renderPanel(){
     srcs.forEach(x=>{const d=el("details",{class:"src"},el("summary",{text:[x.title,x.author&&"("+x.author+")"].filter(Boolean).join(" ")||"מקור"}));if(x.page)d.append(el("p",{text:x.page}));if(x.text)d.append(el("p",{text:x.text}));s.append(d)});pn.append(s)}
   if(S.canWrite)pn.append(el("div",{},el("button",{class:"btn small danger",onclick:()=>confirmDelete(id)},"מחיקת האדם מהעץ")));
 }
+function isImgItem(x){const m=x.mime||x.contentType||"";return m?/^image\//.test(m):true}
+async function openDriveFile(fid,title){const w=window.open("","_blank");if(w)w.document.write('<p dir="rtl" style="font-family:sans-serif">פותח את הקובץ…</p>');
+  try{const u=await driveSrc(fid);if(w)w.location.href=u;else location.href=u}catch(e){if(w)w.close();if(!(e instanceof NeedAuth))toast("לא הצלחתי לפתוח את הקובץ: "+(e.message||e),true)}}
+function openGallery(pid,start){const p=P(pid);const list=(p.photos||[]).filter(isImgItem);let i=start;
+  const box=el("div",{class:"lightbox"});const cap=el("div",{class:"hint",style:"text-align:center"});const nav=el("div",{class:"foot",style:"justify-content:center"});
+  const draw=()=>{const cur=P(pid);const L=(cur.photos||[]).filter(isImgItem);if(!L.length){closeDialog();return}i=Math.max(0,Math.min(i,L.length-1));const x=L[i];
+    box.innerHTML="";box.append(driveImg(x.driveId,x.caption||""));cap.textContent=(x.caption||fullName(cur))+`  ·  ${i+1} מתוך ${L.length}`;nav.innerHTML="";
+    nav.append(el("button",{class:"btn",disabled:i===0,onclick:()=>{i--;draw()}},"→ הקודמת"),el("button",{class:"btn",disabled:i===L.length-1,onclick:()=>{i++;draw()}},"הבאה ←"));
+    if(S.canWrite){const idx=(cur.photos||[]).indexOf(x);
+      nav.append(x.primary?el("span",{class:"pill",style:"align-self:center",text:"תמונה ראשית"}):el("button",{class:"btn",onclick:async()=>{await setPrimaryPhoto(pid,idx);draw()}},"לקבוע כתמונה ראשית"),
+        el("button",{class:"btn",onclick:()=>{const inp=el("input",{value:x.caption||"",style:"flex:1;padding:6px;border:1px solid var(--line);border-radius:7px"});nav.innerHTML="";nav.append(inp,el("button",{class:"btn primary",onclick:async()=>{const ph=[...(P(pid).photos||[])];ph[idx]={...ph[idx],caption:inp.value.trim()};await savePerson({...P(pid),photos:ph});draw()}},"שמירה"));inp.focus()}},"עריכת כיתוב"),
+        el("button",{class:"btn danger",onclick:async()=>{await removePhoto(pid,idx);draw()}},"מחיקה"))}
+    nav.append(el("button",{class:"btn",onclick:closeDialog},"סגירה"))};
+  openDialog(box,cap,nav);$("#dlg").classList.add("wide");draw()}
 function openLightbox(x,p){openDialog(el("div",{class:"lightbox"},driveImg(x.driveId,x.caption||"")),el("div",{class:"hint",text:x.caption||fullName(p)}),el("div",{class:"foot"},el("button",{class:"btn",onclick:closeDialog},"סגירה")))}
 
 /* ---------- photos ---------- */
 $("#file-photo").addEventListener("change",async e=>{const files=[...e.target.files];e.target.value="";const p=P(S.focus);if(!p||!files.length)return;
   let folder;try{folder=await subFolder("תמונות")}catch(err){if(!(err instanceof NeedAuth))toast("לא הצלחתי לפתוח את תיקיית התמונות ב-Drive.",true);return}
-  const ph=[...(p.photos||[])];for(const f of files){try{toast("מעלה את "+f.name+"…");const r=await driveUpload(f,fullName(p)+" - "+f.name,folder);ph.push({driveId:r.id,caption:f.name.replace(/\.[^.]+$/,""),mime:r.mimeType||f.type,primary:!ph.length})}catch(err){toast("ההעלאה נכשלה: "+(err.message||err),true)}}
-  await savePerson({...P(S.focus)||p,photos:ph});toast("התמונות נשמרו ב-Drive.")});
+  const ph=[...(p.photos||[])],dc=[...(p.docs||[])];let moved=0;
+  for(const f of files){const isImg=/^image\//.test(f.type);try{toast("מעלה את "+f.name+"…");const fold=isImg?folder:await subFolder("מסמכים");const r=await driveUpload(f,fullName(p)+" - "+f.name,fold);
+      if(isImg)ph.push({driveId:r.id,caption:f.name.replace(/\.[^.]+$/,""),mime:r.mimeType||f.type,primary:!ph.some(x=>x.primary)&&!ph.filter(isImgItem).length});
+      else{dc.push({driveId:r.id,title:f.name.replace(/\.[^.]+$/,""),date:"",note:"",contentType:r.mimeType||f.type,added:new Date().toISOString().slice(0,10)});moved++}}catch(err){toast("ההעלאה נכשלה: "+(err.message||err),true)}}
+  await savePerson({...P(S.focus)||p,photos:ph,docs:dc});toast(moved?`נשמר ב-Drive. ${moved} קבצים שאינם תמונה נכנסו ל״מסמכים״.`:"התמונות נשמרו ב-Drive.")});
 async function setPrimaryPhoto(id,i){const p=P(id);const ph=(p.photos||[]).map((x,j)=>({...x,primary:j===i}));await savePerson({...p,photos:ph})}
 async function removePhoto(id,i){const p=P(id);const ph=[...(p.photos||[])];const [rm]=ph.splice(i,1);if(rm?.primary&&ph[0])ph[0]={...ph[0],primary:true};await savePerson({...p,photos:ph});if(rm?.driveId){try{await driveTrash(rm.driveId)}catch(e){}}}
 
@@ -615,7 +638,7 @@ function openDocEdit(id,i){const p=P(id);const d=(p.docs||[])[i];if(!d)return;
 
 /* ---------- dialogs ---------- */
 function openDialog(...kids){const b=$("#dlgbody");b.innerHTML="";kids.forEach(k=>k&&b.append(k));const d=$("#dlg");if(!d.open)d.showModal()}
-function closeDialog(){const d=$("#dlg");if(d.open)d.close()}
+function closeDialog(){const d=$("#dlg");d.classList.remove("wide");if(d.open)d.close()}
 function field(label,id,val,attrs={}){return el("label",{class:attrs.full?"full":""},label,attrs.textarea?el("textarea",{id,...attrs.extra},val||""):attrs.select?(()=>{const s=el("select",{id});attrs.select.forEach(([v,t])=>s.append(el("option",{value:v,selected:v===val},t)));return s})():(attrs.extra===DATE_PH?dateBox(id,val):el("input",{id,value:val||"",...attrs.extra})))}
 /* date field: free text + calendar popup */
 function dateBox(id,val){const txt=el("input",{id,value:val||"",...DATE_PH});const cal=el("input",{type:"date",class:"cal-hidden",tabindex:"-1","aria-hidden":"true"});
