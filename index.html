@@ -106,6 +106,8 @@ h1,h2,h3{font-family:var(--font-display);text-wrap:balance;margin:0}
 .card.focus{outline:3px solid var(--accent);outline-offset:2px;width:180px}
 .card.small{width:132px;min-height:60px;opacity:.95}
 .card.uncertain{border-style:dashed}
+.holo-mark{position:absolute;top:4px;inset-inline-start:6px;font-size:13px;line-height:1;color:#c99a06}
+.pill.holo{background:#fff6d6;color:#7a5a00;border-color:#e8c860}
 .card.uncertain::after{content:"משוער";position:absolute;bottom:4px;inset-inline-end:6px;font-size:10px;color:var(--warn);font-weight:700}
 .card.empty{border:1px dashed var(--line);box-shadow:none;background:transparent;color:var(--muted);justify-content:center;align-items:center;font-size:13px}
 .card.empty.disabled{cursor:default}
@@ -432,6 +434,7 @@ function card(id,opts={}){
   const p=P(id);if(!p)return el("div",{class:"card empty disabled"});
   const c=el("div",{class:`card ${p.sex||""} ${opts.focus?"focus":""} ${opts.small?"small":""} ${opts.mini?"mini":""} ${p.uncertain?"uncertain":""}`,"data-id":id,tabindex:"0",role:"button","aria-label":fullName(p)});
   c.append(avatar(p));
+  if(p.holocaust)c.append(el("span",{class:"holo-mark",title:"נספה בשואה",text:"✡"}));
   const t=el("div",{},el("div",{class:"nm",text:fullName(p)}));
   {const an=altName(p);if(an)t.append(el("div",{class:"mn",dir:"ltr",style:"text-align:end",text:an}))}
   if(p.marriedName&&!opts.mini)t.append(el("div",{class:"mn",text:"(לאחר נישואין: "+p.marriedName+")"}));
@@ -572,7 +575,7 @@ function renderPanel(){
   const pn=$("#panel");pn.innerHTML="";const id=S.sel;const p=P(id);
   if(!p){closePanel();return}
   pn.append(el("div",{class:"panel-top"},el("button",{class:"btn small",onclick:()=>{setFocus(id);}},"📍 להציג את העץ סביבו"),el("button",{class:"xbtn",title:"סגירה","aria-label":"סגירה",onclick:closePanel},"×")));
-  const head=el("div",{class:"prof-head"},avatar(p),el("div",{},el("h2",{text:fullName(p)}),altName(p)?el("div",{class:"sub",dir:"ltr",style:"text-align:end",text:altName(p)}):null,el("div",{class:"sub",text:[lifespan(p),p.marriedName?"לאחר נישואין: "+p.marriedName:"",p.suffix].filter(Boolean).join(" · ")}),p.uncertain?el("span",{class:"pill",text:"קשר משוער – דורש אימות"}):null));
+  const head=el("div",{class:"prof-head"},avatar(p),el("div",{},el("h2",{text:fullName(p)}),altName(p)?el("div",{class:"sub",dir:"ltr",style:"text-align:end",text:altName(p)}):null,el("div",{class:"sub",text:[lifespan(p),p.marriedName?"לאחר נישואין: "+p.marriedName:"",p.suffix].filter(Boolean).join(" · ")}),p.holocaust?el("span",{class:"pill holo",text:"✡ "+gword(p,"נספה","נספתה","נספה/תה")+" בשואה"}):null,p.uncertain?el("span",{class:"pill",text:"קשר משוער – דורש אימות"}):null));
   pn.append(head);
   if(S.canWrite)pn.append(el("div",{class:"dropzone",text:"אפשר לגרור לכאן תמונות וקבצים מהמחשב"}),el("div",{class:"actions"},el("button",{class:"btn small primary",onclick:()=>openEdit(id)},"עריכת פרטים"),el("button",{class:"btn small",onclick:()=>$("#file-photo").click()},"הוספת תמונה"),el("button",{class:"btn small",onclick:()=>openDocUpload(id)},"הוספת מסמך"),el("button",{class:"btn small",onclick:()=>openRel(id)},"מה הקשר אליו?")));
   else pn.append(el("div",{class:"actions"},el("button",{class:"btn small",onclick:()=>openRel(id)},"מה הקשר אליו?")));
@@ -687,13 +690,13 @@ function personForm(p){return el("div",{class:"form"},
   ...(()=>{const n=names(p);return[field("שם פרטי (עברית)","f-given",n.gH),field("שם משפחה (עברית)","f-surname",n.sH),field("First name (English)","f-given-en",n.gE,{extra:{dir:"ltr"}}),field("Last name (English)","f-surname-en",n.sE,{extra:{dir:"ltr"}})]})(),
   field("שם לאחר נישואין / שם נוסף","f-married",p.marriedName),field("מין","f-sex",p.sex||"U",{select:[["M","זכר"],["F","נקבה"],["U","לא ידוע"]]}),
   field("תאריך לידה","f-bdate",dateToInput(p.birthDate),{extra:DATE_PH}),field("מקום לידה","f-bplace",p.birthPlace),
-  el("p",{class:"hint full",style:"margin:0",text:"תאריכים: יום/חודש/שנה (15/03/2026), חודש/שנה (3/2026) או רק שנה. אפשר גם ״בערך 1930״, ״לפני 1940״, ״בין 1930 ל-1935״."}),el("label",{class:"check full"},el("input",{type:"checkbox",id:"f-dec",checked:!!p.deceased}),"נפטר/ה"),
+  el("p",{class:"hint full",style:"margin:0",text:"תאריכים: יום/חודש/שנה (15/03/2026), חודש/שנה (3/2026) או רק שנה. אפשר גם ״בערך 1930״, ״לפני 1940״, ״בין 1930 ל-1935״."}),el("label",{class:"check full"},el("input",{type:"checkbox",id:"f-dec",checked:!!p.deceased}),"נפטר/ה"),el("label",{class:"check full"},el("input",{type:"checkbox",id:"f-holo",checked:!!p.holocaust}),"נספה/תה בשואה"),
   field("תאריך פטירה","f-ddate",dateToInput(p.deathDate),{extra:DATE_PH}),field("מקום פטירה","f-dplace",p.deathPlace),
   field("מקום קבורה","f-burial",p.burialPlace),field("מקצוע","f-occ",p.occupation),
   field("מגורים","f-res",p.residence,{full:true}),
   field("הערות וסיפורים","f-notes",p.notes,{full:true,textarea:true}),
   el("label",{class:"check full"},el("input",{type:"checkbox",id:"f-unc",checked:!!p.uncertain}),"הקשר של האדם הזה משוער ודורש אימות"))}
-function readForm(p){const g=i=>($("#"+i)?.value||"").trim();return{...p,given:g("f-given"),surname:g("f-surname"),givenEn:g("f-given-en"),surnameEn:g("f-surname-en"),marriedName:g("f-married"),sex:g("f-sex")||"U",birthDate:inputToDate(g("f-bdate")),birthPlace:g("f-bplace"),deceased:$("#f-dec").checked||!!g("f-ddate"),deathDate:inputToDate(g("f-ddate")),deathPlace:g("f-dplace"),burialPlace:g("f-burial"),occupation:g("f-occ"),residence:g("f-res"),notes:$("#f-notes").value,uncertain:$("#f-unc").checked}}
+function readForm(p){const g=i=>($("#"+i)?.value||"").trim();return{...p,given:g("f-given"),surname:g("f-surname"),givenEn:g("f-given-en"),surnameEn:g("f-surname-en"),marriedName:g("f-married"),sex:g("f-sex")||"U",birthDate:inputToDate(g("f-bdate")),birthPlace:g("f-bplace"),deceased:$("#f-dec").checked||$("#f-holo").checked||!!g("f-ddate"),holocaust:$("#f-holo").checked,deathDate:inputToDate(g("f-ddate")),deathPlace:g("f-dplace"),burialPlace:g("f-burial"),occupation:g("f-occ"),residence:g("f-res"),notes:$("#f-notes").value,uncertain:$("#f-unc").checked}}
 const blank=()=>({given:"",surname:"",marriedName:"",suffix:"",sex:"U",birthDate:"",birthPlace:"",deceased:false,deathDate:"",deathPlace:"",burialPlace:"",occupation:"",residence:"",notes:"",sources:[],remotePhotos:[],photos:[],docs:[],uncertain:false});
 function openEdit(id){const p=P(id);openDialog(el("h2",{text:"עריכת "+fullName(p)}),personForm(p),el("div",{class:"foot"},
   el("button",{class:"btn primary",onclick:async()=>{const np=readForm(p);if(!np.given&&!np.surname&&!np.givenEn&&!np.surnameEn){toast("צריך לפחות שם פרטי או שם משפחה.",true);return}closeDialog();if(await savePerson(np))toast("נשמר.")}},"שמירה"),el("button",{class:"btn",onclick:closeDialog},"ביטול")))}
