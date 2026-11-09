@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>עץ משפחת כהן</title>
+<script src="https://accounts.google.com/gsi/client" async></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Frank+Ruhl+Libre:wght@500;700&family=Assistant:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+/* Layout idea: a header bar with search and views, the family chart as a pannable canvas, and a profile panel docked on the start (right) side. */
+:root{
+  --bg:#eef2f1;
+  --surface:#ffffff;
+  --ink:#1b2929;
+  --muted:#5b6b6a;
+  --line:#c9d3d1;
+  --accent:#1f6b66;
+  --accent-soft:#dcebe9;
+  --male:#3a6aa6;
+  --female:#b04d78;
+  --unknown:#8a9493;
+  --warn:#b7791f;
+  --danger:#b3412f;
+  --shadow:0 1px 2px rgba(20,40,40,.08),0 4px 14px rgba(20,40,40,.06);
+  --font-display:"Frank Ruhl Libre",Georgia,"Times New Roman",serif;
+  --font-body:"Assistant","Segoe UI",Arial,sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#121a1a;--surface:#1b2626;--ink:#e3ecea;--muted:#9aaaa8;--line:#344444;
+    --accent:#5fb3ab;--accent-soft:#213a38;--male:#78a3dc;--female:#e087ad;--unknown:#8d9998;
+    --warn:#e0a84a;--danger:#e57a66;--shadow:0 1px 2px rgba(0,0,0,.4),0 4px 14px rgba(0,0,0,.3);
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#121a1a;--surface:#1b2626;--ink:#e3ecea;--muted:#9aaaa8;--line:#344444;
+  --accent:#5fb3ab;--accent-soft:#213a38;--male:#78a3dc;--female:#e087ad;--unknown:#8d9998;
+  --warn:#e0a84a;--danger:#e57a66;--shadow:0 1px 2px rgba(0,0,0,.4),0 4px 14px rgba(0,0,0,.3);
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--font-body);font-size:15px;line-height:1.45;display:flex;flex-direction:column;overflow:hidden}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+h1,h2,h3{font-family:var(--font-display);text-wrap:balance;margin:0}
+
+/* header */
+.top{display:flex;align-items:center;gap:14px;padding:10px 16px;background:var(--surface);border-bottom:1px solid var(--line);flex-wrap:wrap}
+.brand{display:flex;flex-direction:column;min-width:0}
+.brand h1{font-size:22px;line-height:1.1}
+.brand .stats{color:var(--muted);font-size:13px;font-variant-numeric:tabular-nums}
+.search{position:relative;flex:1;min-width:200px;max-width:420px}
+.search input{width:100%;padding:8px 12px;border:1px solid var(--line);border-radius:8px;background:var(--bg)}
+.results{position:absolute;top:100%;inset-inline:0;margin-top:4px;background:var(--surface);border:1px solid var(--line);border-radius:8px;box-shadow:var(--shadow);max-height:360px;overflow:auto;z-index:30;display:none}
+.results.open{display:block}
+.results button{display:flex;justify-content:space-between;gap:8px;width:100%;text-align:start;padding:7px 12px;border:0;background:none}
+.results button:hover,.results button.active{background:var(--accent-soft)}
+.results small{color:var(--muted)}
+.tabs{display:flex;gap:4px;background:var(--bg);padding:3px;border-radius:9px;border:1px solid var(--line)}
+.tabs button{border:0;background:none;padding:6px 12px;border-radius:7px;color:var(--muted);font-weight:600}
+.tabs button[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:var(--shadow)}
+.actions{display:flex;gap:6px;flex-wrap:wrap}
+.btn{border:1px solid var(--line);background:var(--surface);padding:6px 12px;border-radius:8px;font-weight:600}
+.btn:hover{border-color:var(--accent)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.danger{color:var(--danger)}
+.btn.small{padding:3px 9px;font-size:13px}
+.banner{padding:8px 16px;background:var(--accent-soft);color:var(--ink);font-size:14px;display:none}
+.banner.show{display:block}
+.banner.warn{background:color-mix(in srgb,var(--warn) 18%,var(--surface))}
+
+/* main */
+.main{flex:1;display:flex;min-height:0}
+.panel{width:380px;max-width:100%;background:var(--surface);border-inline-end:1px solid var(--line);overflow:auto;padding:18px;display:flex;flex-direction:column;gap:16px}
+.view{flex:1;min-width:0;position:relative;display:none}
+.view.active{display:block}
+
+/* chart */
+.canvas{position:absolute;inset:0;overflow:hidden;cursor:grab;touch-action:none}
+.canvas.dragging{cursor:grabbing}
+.inner{position:absolute;top:0;left:0;transform-origin:0 0;padding:40px 60px}
+.inner svg.links{position:absolute;top:0;left:0;pointer-events:none;overflow:visible}
+.links path{fill:none;stroke:var(--line);stroke-width:2}
+.links path.uncertain{stroke-dasharray:5 4;stroke:var(--warn)}
+.gen{display:grid;grid-template-columns:repeat(8,170px);justify-content:center;margin-bottom:46px}
+.gen .slot{display:flex;justify-content:center}
+.gen.g1 .slot{grid-column:span 4}.gen.g2 .slot{grid-column:span 2}
+.genlabel{position:absolute;inset-inline-start:8px;font-size:12px;color:var(--muted);letter-spacing:.02em}
+.row{display:flex;justify-content:center;align-items:flex-start;gap:22px;margin-bottom:46px}
+.group{display:flex;flex-direction:column;align-items:center;gap:8px}
+.group .kids{display:flex;gap:12px;justify-content:center}
+.groupcap{font-size:12px;color:var(--muted)}
+.card{width:156px;min-height:78px;background:var(--surface);border:1px solid var(--line);border-top:4px solid var(--unknown);border-radius:10px;padding:8px 10px;box-shadow:var(--shadow);display:flex;gap:8px;align-items:flex-start;text-align:start;cursor:pointer;position:relative}
+.card.M{border-top-color:var(--male)}.card.F{border-top-color:var(--female)}
+.card:hover{border-color:var(--accent);border-top-color:inherit}
+.card.M:hover{border-top-color:var(--male)}.card.F:hover{border-top-color:var(--female)}
+.card.focus{outline:3px solid var(--accent);outline-offset:2px;width:180px}
+.card.small{width:132px;min-height:60px;opacity:.95}
+.card.uncertain{border-style:dashed}
+.card.uncertain::after{content:"משוער";position:absolute;bottom:4px;inset-inline-end:6px;font-size:10px;color:var(--warn);font-weight:700}
+.card.empty{border:1px dashed var(--line);box-shadow:none;background:transparent;color:var(--muted);justify-content:center;align-items:center;font-size:13px}
+.card.empty.disabled{cursor:default}
+.avatar{width:38px;height:38px;border-radius:50%;flex:none;display:grid;place-items:center;font-weight:700;font-size:14px;color:#fff;background:var(--unknown);overflow:hidden}
+.avatar.M{background:var(--male)}.avatar.F{background:var(--female)}
+.avatar img{width:100%;height:100%;object-fit:cover}
+.card .nm{font-weight:700;font-size:14px;line-height:1.2;overflow-wrap:anywhere}
+.card .yr{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.card .mn{font-size:11px;color:var(--muted)}
+.zoom{position:absolute;bottom:14px;inset-inline-end:14px;display:flex;flex-direction:column;gap:6px;z-index:5}
+.zoom button{width:36px;height:36px;border-radius:8px;border:1px solid var(--line);background:var(--surface);font-weight:700;font-size:18px;box-shadow:var(--shadow)}
+.chartopts{position:absolute;top:12px;inset-inline-end:14px;z-index:5;display:flex;gap:8px;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:6px 10px;font-size:13px;box-shadow:var(--shadow)}
+.chartopts label{display:flex;gap:4px;align-items:center}
+
+/* profile */
+.prof-head{display:flex;gap:14px;align-items:center}
+.prof-head .avatar{width:72px;height:72px;font-size:24px}
+.prof-head h2{font-size:24px;line-height:1.15}
+.prof-head .sub{color:var(--muted);font-size:14px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:999px;padding:3px 10px 3px 4px;background:var(--bg);font-size:13px;cursor:pointer}
+.chip .dot{width:9px;height:9px;border-radius:50%;background:var(--unknown)}
+.chip .dot.M{background:var(--male)}.chip .dot.F{background:var(--female)}
+.chip:hover{border-color:var(--accent)}
+.facts{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;margin:0}
+.facts dt{color:var(--muted)}.facts dd{margin:0;overflow-wrap:anywhere}
+.sect h3{font-size:16px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center}
+.note{white-space:pre-wrap;background:var(--bg);border-radius:8px;padding:10px;font-size:14px}
+.pill{display:inline-block;font-size:11px;font-weight:700;padding:1px 8px;border-radius:999px;background:color-mix(in srgb,var(--warn) 20%,var(--surface));color:var(--warn)}
+.photos{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.photos figure{margin:0;position:relative}
+.photos img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:8px;cursor:zoom-in;background:var(--bg)}
+.photos .ph-tools{position:absolute;top:4px;inset-inline-start:4px;display:flex;gap:3px}
+.docs{display:flex;flex-direction:column;gap:6px}.docrow{display:flex;gap:10px;align-items:center;background:var(--bg);border-radius:8px;padding:8px 10px}.docicon{font-size:20px}.docmain{flex:1;min-width:0}.doclink{color:var(--accent);font-weight:700;text-decoration:none;border:0;background:none;padding:0;text-align:start;cursor:pointer}.doclink:hover{text-decoration:underline}.multi{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.photos .ph-tools button{font-size:11px;padding:1px 6px;border-radius:6px;border:0;background:rgba(0,0,0,.55);color:#fff}
+details.src{border-top:1px solid var(--line);padding:6px 0}
+details.src summary{cursor:pointer;font-size:14px}
+details.src p{white-space:pre-wrap;font-size:13px;color:var(--muted);margin:6px 0}
+.addgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+
+/* list view */
+.listwrap{position:absolute;inset:0;overflow:auto;padding:16px 20px}
+.listtools{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
+.surnames{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
+.surnames button{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:3px 10px;font-size:13px}
+.surnames button[aria-pressed="true"]{background:var(--accent);color:#fff;border-color:var(--accent)}
+table{border-collapse:collapse;width:100%;background:var(--surface);border-radius:10px;overflow:hidden;box-shadow:var(--shadow)}
+th,td{padding:7px 10px;text-align:start;border-bottom:1px solid var(--line);font-size:14px;vertical-align:top}
+th{background:var(--bg);font-weight:700;cursor:pointer;white-space:nowrap}
+td.num{font-variant-numeric:tabular-nums;white-space:nowrap}
+tbody tr{cursor:pointer}tbody tr:hover{background:var(--accent-soft)}
+
+/* research view */
+.research{position:absolute;inset:0;overflow:auto;padding:20px}
+.research .inner2{max-width:760px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
+.rcard{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px 16px;box-shadow:var(--shadow)}
+.rcard h3{font-size:18px;margin-bottom:4px}
+.rcard .date{color:var(--muted);font-size:13px}
+.rcard p{white-space:pre-wrap;margin:8px 0 0;max-width:65ch}
+
+/* dialogs */
+dialog{border:1px solid var(--line);border-radius:12px;padding:0;background:var(--surface);color:var(--ink);width:min(560px,94vw);box-shadow:0 20px 60px rgba(0,0,0,.25)}
+dialog::backdrop{background:rgba(10,20,20,.45)}
+.dlg{padding:18px 20px;display:flex;flex-direction:column;gap:12px;max-height:86vh;overflow:auto}
+.dlg h2{font-size:20px}
+.form{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.form .full{grid-column:1/-1}
+.form label{display:flex;flex-direction:column;gap:3px;font-size:13px;color:var(--muted)}
+.form input,.form select,.form textarea{padding:7px 9px;border:1px solid var(--line);border-radius:7px;background:var(--bg);color:var(--ink)}
+.form textarea{min-height:90px;resize:vertical}
+.form .check{flex-direction:row;align-items:center;gap:8px;color:var(--ink)}
+.dlg .foot{display:flex;gap:8px;justify-content:flex-start;flex-wrap:wrap}
+.picker{position:relative}
+.picker .results{position:absolute}
+.relout{background:var(--bg);border-radius:10px;padding:14px}
+.relout .big{font-family:var(--font-display);font-size:22px;color:var(--accent)}
+.chain{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:10px}
+.chain ol{margin:0;padding-inline-start:18px;font-size:14px}
+.chain h4{margin:0 0 4px;font-size:13px;color:var(--muted)}
+.progress{height:8px;background:var(--bg);border-radius:4px;overflow:hidden}
+.progress div{height:100%;background:var(--accent);width:0}
+.lightbox img{max-width:100%;max-height:75vh;display:block;margin:0 auto;border-radius:8px}
+.hint{font-size:13px;color:var(--muted)}
+.loading{position:absolute;inset:0;display:grid;place-items:center;color:var(--muted);font-size:16px;text-align:center;padding:20px}
+@media (max-width:820px){
+  .main{flex-direction:column}
+  .panel{width:100%;max-height:45%;border-inline-end:0;border-bottom:1px solid var(--line);order:2}
+  .view{order:1;min-height:55%}
+  .form{grid-template-columns:1fr}
+}
+@media (prefers-reduced-motion: reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <h1 id="title">עץ משפחת כהן</h1>
+    <div class="stats" id="stats">טוען…</div>
+  </div>
+  <div class="search">
+    <input id="q" type="search" placeholder="חיפוש אדם בעברית או באנגלית…" autocomplete="off" aria-label="חיפוש אדם">
+    <div class="results" id="qres" role="listbox"></div>
+  </div>
+  <div class="tabs" role="group" aria-label="תצוגה">
+    <button id="tab-tree" aria-pressed="true">עץ</button>
+    <button id="tab-list" aria-pressed="false">רשימה</button>
+    <button id="tab-research" aria-pressed="false">מחקר</button>
+  </div>
+  <div class="actions">
+    <button class="btn" id="btn-rel">מה הקשר?</button>
+    <button class="btn edit-only" id="btn-add">הוסף אדם</button>
+    <button class="btn" id="btn-io">ייבוא / ייצוא</button>
+    <button class="btn" id="btn-out" style="display:none" title="התנתקות מ-Google">יציאה</button>
+    <span class="hint" id="savestate" aria-live="polite"></span>
+  </div>
+</header>
+<div class="banner" id="banner"></div>
+<div class="main">
+  <aside class="panel" id="panel" aria-label="פרטי אדם"></aside>
+  <section class="view active" id="view-tree">
+    <div class="canvas" id="canvas">
+      <div class="inner" id="inner"></div>
+    </div>
+    <div class="chartopts">
+      <label><input type="checkbox" id="opt-sibs" checked> אחים</label>
+      <label><input type="checkbox" id="opt-gk"> נכדים</label>
+      <label><input type="checkbox" id="opt-gen3" checked> 3 דורות למעלה</label>
+    </div>
+    <div class="zoom">
+      <button id="z-in" aria-label="הגדל">+</button>
+      <button id="z-out" aria-label="הקטן">−</button>
+      <button id="z-fit" aria-label="מרכז" style="font-size:14px">⌖</button>
+    </div>
+    <div class="loading" id="loading">טוען את העץ…</div>
+  </section>
+  <section class="view" id="view-list"><div class="listwrap" id="listwrap"></div></section>
+  <section class="view" id="view-research"><div class="research"><div class="inner2" id="research"></div></div></section>
+</div>
+
+<dialog id="dlg"><div class="dlg" id="dlgbody"></div></dialog>
+<input type="file" id="file-photo" accept="image/*" multiple hidden>
+<input type="file" id="file-ged" accept=".ged,.txt,.json" hidden>
+
+<script>
+"use strict";
+/* ---------- state ---------- */
+const S={people:{},fams:{},meta:{},research:{},famc:{},fams_:{},focus:null,canWrite:false,mode:"loading",db:null,assets:null,downloads:null,
+  view:"tree",tx:0,ty:0,sc:1,listSort:{k:"name",dir:1},listSurname:"",loaded:{people:false,families:false}};
+const $=s=>document.querySelector(s);
+const el=(tag,attrs={},...kids)=>{const e=document.createElement(tag);for(const[k,v]of Object.entries(attrs)){if(v==null||v===false)continue;if(k==="class")e.className=v;else if(k==="text")e.textContent=v;else if(k.startsWith("on"))e.addEventListener(k.slice(2),v);else e.setAttribute(k,v===true?"":v)}for(const c of kids.flat()){if(c==null||c===false)continue;e.append(c.nodeType?c:document.createTextNode(String(c)))}return e};
+const uid=p=>p+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+function toast(msg,warn){const b=$("#banner");b.textContent=msg;b.className="banner show"+(warn?" warn":"");clearTimeout(toast.t);toast.t=setTimeout(()=>{if(S.mode!=="local")b.className="banner"},6000)}
+
+/* ---------- names & dates ---------- */
+const MONTHS={JAN:"ינו׳",FEB:"פבר׳",MAR:"מרץ",APR:"אפר׳",MAY:"מאי",JUN:"יוני",JUL:"יולי",AUG:"אוג׳",SEP:"ספט׳",OCT:"אוק׳",NOV:"נוב׳",DEC:"דצמ׳"};
+function fmtDate(d){if(!d)return"";let s=String(d).trim();
+  const tr=x=>x.replace(/\b(\d{1,2}) ([A-Z]{3}) (\d{3,4})\b/g,(m,a,b,c)=>`${a} ${MONTHS[b]||b} ${c}`).replace(/\b([A-Z]{3}) (\d{4})\b/g,(m,b,c)=>MONTHS[b]?`${MONTHS[b]} ${c}`:m);
+  let m;
+  if((m=s.match(/^BET (.+) AND (.+)$/)))return`בין ${tr(m[1])} ל-${tr(m[2])}`;
+  if((m=s.match(/^(ABT|EST|CAL) (.+)$/)))return`בערך ${tr(m[2])}`;
+  if((m=s.match(/^BEF (.+)$/)))return`לפני ${tr(m[1])}`;
+  if((m=s.match(/^AFT (.+)$/)))return`אחרי ${tr(m[1])}`;
+  if((m=s.match(/^(TO|FROM) (.+)$/)))return tr(m[2]);
+  return tr(s)}
+const yearOf=d=>{const m=String(d||"").match(/(\d{4})/);return m?+m[1]:null};
+function fullName(p){if(!p)return"?";const n=[p.given,p.surname].filter(Boolean).join(" ").trim();return n||"ללא שם"}
+function shortName(p){if(!p)return"?";const g=(p.given||"").split(/\s+/)[0]||"";const s=(p.surname||"").split(/\s+/)[0]||"";return (g+" "+s).trim()||"ללא שם"}
+function lifespan(p){const b=yearOf(p.birthDate),d=yearOf(p.deathDate);if(b&&d)return`${b}–${d}`;if(b)return p.deceased?`${b}–?`:`נ. ${b}`;if(d)return`נפ׳ ${d}`;return p.deceased?"נפטר/ה":""}
+function initials(p){const n=fullName(p).replace(/[()"'?]/g,"").trim().split(/\s+/);return((n[0]||"")[0]||"?")+((n[1]||"")[0]||"")}
+const norm=s=>String(s||"").toLowerCase().replace(/[֑-ׇ]/g,"").replace(/[׳'"״().,\-]/g," ").replace(/\s+/g," ").trim();
+function primaryPhoto(p){const ph=(p.photos||[]);const pr=ph.find(x=>x.primary)||ph[0];return pr?pr.driveId:null}
+function avatar(p,cls=""){const a=el("div",{class:`avatar ${p?.sex||""} ${cls}`});const u=p&&primaryPhoto(p);if(u)a.append(driveImg(u,""));else a.textContent=initials(p);return a}
+const gword=(p,m,f,u)=>p?.sex==="M"?m:p?.sex==="F"?f:(u||m+"/"+f);
+
+/* ---------- index ---------- */
+function reindex(){S.famc={};S.fams_={};for(const f of Object.values(S.fams)){for(const c of f.children||[])(S.famc[c]=S.famc[c]||[]).push(f.id);for(const s of[f.husb,f.wife])if(s)(S.fams_[s]=S.fams_[s]||[]).push(f.id)}}
+const P=id=>S.people[id];
+function parentsOf(id){const out=[];for(const fid of S.famc[id]||[]){const f=S.fams[fid];if(!f)continue;if(f.husb&&P(f.husb))out.push(f.husb);if(f.wife&&P(f.wife))out.push(f.wife)}return out}
+function birthFam(id){const l=S.famc[id]||[];return l.length?S.fams[l[0]]:null}
+function father(id){const f=birthFam(id);return f&&f.husb&&P(f.husb)?f.husb:null}
+function mother(id){const f=birthFam(id);return f&&f.wife&&P(f.wife)?f.wife:null}
+function spouseFams(id){return(S.fams_[id]||[]).map(f=>S.fams[f]).filter(Boolean)}
+function spouseIn(f,id){const o=f.husb===id?f.wife:f.husb;return o&&P(o)?o:null}
+function childrenOf(id){const s=new Set();for(const f of spouseFams(id))for(const c of f.children||[])if(P(c))s.add(c);return[...s]}
+function siblingsOf(id){const s=new Set();for(const fid of S.famc[id]||[]){const f=S.fams[fid];for(const c of f?.children||[])if(c!==id&&P(c))s.add(c)}return[...s]}
+const byBirth=(a,b)=>(yearOf(P(a)?.birthDate)||9999)-(yearOf(P(b)?.birthDate)||9999);
+
+/* ---------- Google Drive storage ---------- */
+const GOOGLE_CLIENT_ID="425816596854-narl7a4c4r4qous1i2fliqjj72j7986u.apps.googleusercontent.com";
+const SCOPE="https://www.googleapis.com/auth/drive.file",ROOT_NAME="עץ משפחה",DATA_NAME="family-tree-data.json";
+const API="https://www.googleapis.com/drive/v3/files",UP="https://www.googleapis.com/upload/drive/v3/files";
+const LS={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{v==null?localStorage.removeItem(k):localStorage.setItem(k,v)}catch(e){}}};
+const G={token:null,exp:0,rootId:null,dataId:null,folders:{},deleted:{people:{},families:{},research:{}}};
+{const t=LS.get("ft.token"),e=+LS.get("ft.tokenExp");if(t&&e>Date.now()+60000){G.token=t;G.exp=e}}
+let tokenClient=null,tokenWaiters=[];
+function gisReady(){return new Promise(res=>{const ch=()=>window.google?.accounts?.oauth2?res():setTimeout(ch,100);ch()})}
+async function initAuth(){await gisReady();tokenClient=google.accounts.oauth2.initTokenClient({client_id:GOOGLE_CLIENT_ID,scope:SCOPE,
+  callback:r=>{if(r.error){tokenWaiters.splice(0).forEach(w=>w.rej(r));return}G.token=r.access_token;G.exp=Date.now()+(r.expires_in-60)*1000;LS.set("ft.token",G.token);LS.set("ft.tokenExp",String(G.exp));LS.set("ft.signedIn","1");tokenWaiters.splice(0).forEach(w=>w.res())},
+  error_callback:e=>tokenWaiters.splice(0).forEach(w=>w.rej(e))})}
+function signIn(){return new Promise((res,rej)=>{tokenWaiters.push({res,rej});tokenClient.requestAccessToken({prompt:LS.get("ft.signedIn")?"":"consent"})})}
+function signOut(){if(G.token&&window.google)google.accounts.oauth2.revoke(G.token,()=>{});G.token=null;LS.set("ft.token",null);LS.set("ft.tokenExp",null);LS.set("ft.signedIn",null);location.reload()}
+class NeedAuth extends Error{}
+async function g(url,opts={}){
+  if(!G.token||Date.now()>G.exp){showSignIn(true);throw new NeedAuth("auth")}
+  const once=()=>fetch(url,{...opts,headers:{...(opts.headers||{}),Authorization:"Bearer "+G.token}});
+  let r;try{r=await once()}catch(e){if(opts.method&&opts.method!=="GET")throw new Error("אין חיבור לאינטרנט");r=await once()}
+  if(r.status===401){G.token=null;LS.set("ft.token",null);showSignIn(true);throw new NeedAuth("auth")}
+  if(!r.ok){let m="";try{m=(await r.json()).error?.message||""}catch(e){}throw new Error("Drive "+r.status+(m?": "+m:""))}
+  return r}
+async function driveFind(q){const r=await g(API+"?q="+encodeURIComponent(q)+"&fields=files(id,name,parents)&spaces=drive");return(await r.json()).files||[]}
+async function driveFolder(name,parent){const r=await g(API+"?fields=id",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name,mimeType:"application/vnd.google-apps.folder",parents:parent?[parent]:undefined})});return(await r.json()).id}
+async function driveUpload(blob,name,parent){const fd=new FormData();fd.append("metadata",new Blob([JSON.stringify({name,parents:[parent]})],{type:"application/json"}));fd.append("file",blob);const r=await g(UP+"?uploadType=multipart&fields=id,name,mimeType",{method:"POST",body:fd});return await r.json()}
+async function driveTrash(id){await g(API+"/"+id,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({trashed:true})})}
+async function subFolder(name){if(G.folders[name])return G.folders[name];const f=await driveFind(`name='${name}' and '${G.rootId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`);G.folders[name]=f[0]?.id||await driveFolder(name,G.rootId);return G.folders[name]}
+/* files from Drive shown as blob URLs */
+const blobCache=new Map();
+function driveSrc(id){if(blobCache.has(id))return blobCache.get(id);const p=g(API+"/"+id+"?alt=media").then(r=>r.blob()).then(b=>URL.createObjectURL(b)).catch(e=>{blobCache.delete(id);throw e});blobCache.set(id,p);return p}
+function driveImg(id,alt){const im=el("img",{alt:alt||""});driveSrc(id).then(u=>im.src=u).catch(()=>{});return im}
+
+function showSignIn(expired){const L=$("#loading");L.style.display="grid";L.innerHTML="";S.mode="signin";
+  L.append(el("div",{style:"display:flex;flex-direction:column;gap:12px;align-items:center;max-width:440px"},el("h2",{text:expired?"צריך להתחבר שוב":"עץ המשפחה"}),
+    el("p",{text:"כל המידע, התמונות והמסמכים נשמרים ב-Google Drive שלך, בתיקייה ״עץ משפחה״. רק אתה רואה אותם."}),
+    el("button",{class:"btn primary",onclick:async()=>{try{await signIn();start()}catch(e){toast("ההתחברות לא הושלמה.",true)}}},"התחברות עם Google")))}
+async function boot(){restoreHash();await initAuth();if(G.token&&Date.now()<G.exp)start();else showSignIn(false)}
+async function start(){const L=$("#loading");L.style.display="grid";L.textContent="טוען את העץ מ-Google Drive…";
+  try{await loadData();S.mode="db";S.canWrite=true;applyWriteUI();afterData();$("#btn-out").style.display=""}
+  catch(e){if(!(e instanceof NeedAuth)){L.textContent="לא הצלחתי לטעון את הנתונים: "+(e.message||e)}}}
+function applyData(d){S.people={};for(const[k,p]of Object.entries(d.people||{}))S.people[k]={...p,id:k};S.fams={};for(const[k,f]of Object.entries(d.families||{}))S.fams[k]={...f,id:k};
+  S.research={};for(const[k,r]of Object.entries(d.research||{}))S.research[k]={...r,id:k};S.meta=d.meta||{};G.deleted={people:{},families:{},research:{},...(d.deleted||{})};G.folders=d.folders||{}}
+function packData(){const strip=o=>{const out={};for(const[k,v]of Object.entries(o)){const x={...v};delete x.id;out[k]=x}return out};
+  return{version:1,meta:S.meta,people:strip(S.people),families:strip(S.fams),research:strip(S.research),deleted:G.deleted,folders:G.folders,savedAt:Date.now()}}
+async function loadData(){const found=await driveFind(`name='${DATA_NAME}' and trashed=false`);
+  if(found.length){G.dataId=found[0].id;G.rootId=found[0].parents?.[0];applyData(await(await g(API+"/"+G.dataId+"?alt=media")).json())}
+  else{const roots=await driveFind(`name='${ROOT_NAME}' and mimeType='application/vnd.google-apps.folder' and trashed=false`);G.rootId=roots[0]?.id||await driveFolder(ROOT_NAME);
+    const r=await driveUpload(new Blob([JSON.stringify(packData())],{type:"application/json"}),DATA_NAME,G.rootId);G.dataId=r.id}}
+let saveT=0,saveChain=Promise.resolve(),dirty=false;
+function queueSave(){dirty=true;setSaveState("שומר…");clearTimeout(saveT);saveT=setTimeout(()=>{saveChain=saveChain.then(doSave,doSave)},700)}
+async function doSave(){if(!dirty||!G.dataId)return;dirty=false;
+  try{const remote=await(await g(API+"/"+G.dataId+"?alt=media")).json();   // merge with changes made on another device
+    const merge=(local,rem,del)=>{const out={...local};for(const[k,v]of Object.entries(rem||{})){if(del[k])continue;if(!out[k]||(v.updatedAt||0)>(out[k].updatedAt||0))out[k]={...v,id:k}}for(const k of Object.keys(del))delete out[k];return out};
+    for(const c of["people","families","research"])G.deleted[c]={...(remote.deleted?.[c]||{}),...G.deleted[c]};
+    S.people=merge(S.people,remote.people,G.deleted.people);S.fams=merge(S.fams,remote.families,G.deleted.families);S.research=merge(S.research,remote.research,G.deleted.research);
+    if((remote.meta?.updatedAt||0)>(S.meta.updatedAt||0))S.meta=remote.meta;G.folders={...(remote.folders||{}),...G.folders}}catch(e){if(e instanceof NeedAuth){dirty=true;return}}
+  try{await g(UP+"/"+G.dataId+"?uploadType=media",{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify(packData())});setSaveState("נשמר ב-Drive ✓");rerender()}
+  catch(e){dirty=true;setSaveState("");if(!(e instanceof NeedAuth))toast("השמירה ל-Drive נכשלה: "+(e.message||e)+". אנסה שוב בשינוי הבא.",true)}}
+function setSaveState(t){const s=$("#savestate");if(s)s.textContent=t}
+window.addEventListener("beforeunload",e=>{if(dirty){e.preventDefault();e.returnValue=""}});
+function setLocalBanner(){}
+function applyWriteUI(){document.querySelectorAll(".edit-only").forEach(e=>e.style.display=S.canWrite?"":"none")}
+let rrPending=false;
+function rerender(){if(rrPending)return;rrPending=true;requestAnimationFrame(()=>{rrPending=false;if(S.importing||S.mode==="signin")return;if(!S.focus||!P(S.focus)||$("#loading").style.display!=="none"){afterData();return}reindex();renderAll(false)})}
+function afterData(){reindex();$("#loading").style.display=Object.keys(S.people).length?"none":"grid";
+  if(!Object.keys(S.people).length){const L=$("#loading");L.innerHTML="";
+    if(S.canWrite&&S.mode==="db"){L.append(el("div",{style:"display:flex;flex-direction:column;gap:12px;align-items:center;max-width:440px"},el("h2",{text:"ברוך הבא לעץ המשפחה"}),el("p",{text:"העץ עוד ריק. בחר/י את קובץ ההתחלה (family-tree-start.json) או קובץ GED של MyHeritage, והעץ ייטען ויישמר ב-Drive שלך."}),el("button",{class:"btn primary",onclick:()=>$("#file-ged").click()},"בחירת קובץ"))) }
+    else if(S.mode!=="signin")L.textContent="העץ עדיין ריק.";}
+  if(!S.focus||!P(S.focus))S.focus=(S.meta.focusDefault&&P(S.meta.focusDefault))?S.meta.focusDefault:Object.keys(S.people)[0]||null;
+  renderAll(true)}
+
+/* ---------- persistence ---------- */
+function stripP(p){const o={...p};delete o.id;return o}
+async function savePerson(p){p={...p,updatedAt:Date.now()};S.people[p.id]=p;delete G.deleted.people[p.id];reindex();queueSave();rerender();return true}
+async function saveFam(f){f={...f,updatedAt:Date.now()};S.fams[f.id]=f;delete G.deleted.families[f.id];reindex();queueSave();rerender();return true}
+async function delDoc(col,id){const c=col==="people"?S.people:S.fams;delete c[id];G.deleted[col==="people"?"people":"families"][id]=Date.now();reindex();queueSave();rerender();return true}
+async function saveNote(n){S.research[n.id]={...n,updatedAt:Date.now()};delete G.deleted.research[n.id];queueSave();renderResearch()}
+async function delNote(id){delete S.research[id];G.deleted.research[id]=Date.now();queueSave();renderResearch()}
+function writeFail(e){toast("השמירה נכשלה: "+(e?.message||e),true);return false}
+
+/* ---------- header ---------- */
+function renderHeader(){const ppl=Object.values(S.people);const ys=ppl.map(p=>yearOf(p.birthDate)).filter(Boolean);
+  const surn={};ppl.forEach(p=>{const s=(p.surname||"").trim();if(s)surn[s]=(surn[s]||0)+1});
+  $("#title").textContent=S.meta.title||"עץ משפחת כהן";
+  $("#stats").textContent=ppl.length?`${ppl.length} אנשים · ${Object.keys(S.fams).length} משפחות${ys.length?` · ${Math.min(...ys)}–${Math.max(...ys)}`:""} · ${Object.keys(surn).length} שמות משפחה`:"העץ ריק"}
+
+function renderAll(center){renderHeader();if(S.view==="tree")renderTree(center);else if(S.view==="list")renderList();else renderResearch();renderPanel()}
+
+/* ---------- tree chart ---------- */
+function card(id,opts={}){
+  if(!id){const e=el("div",{class:"card empty"+(S.canWrite&&opts.add?"":" disabled")},S.canWrite&&opts.add?"+ "+opts.add.label:"");if(S.canWrite&&opts.add)e.addEventListener("click",ev=>{ev.stopPropagation();opts.add.fn()});return e}
+  const p=P(id);if(!p)return el("div",{class:"card empty disabled"});
+  const c=el("div",{class:`card ${p.sex||""} ${opts.focus?"focus":""} ${opts.small?"small":""} ${p.uncertain?"uncertain":""}`,"data-id":id,tabindex:"0",role:"button","aria-label":fullName(p)});
+  c.append(avatar(p));
+  const t=el("div",{},el("div",{class:"nm",text:fullName(p)}));
+  if(p.marriedName)t.append(el("div",{class:"mn",text:"(לאחר נישואין: "+p.marriedName+")"}));
+  const ls=lifespan(p);if(ls)t.append(el("div",{class:"yr",text:ls}));
+  if(!opts.small&&p.birthPlace)t.append(el("div",{class:"mn",text:p.birthPlace}));
+  c.append(t);
+  const go=()=>setFocus(id);c.addEventListener("click",e=>{e.stopPropagation();go()});c.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();go()}});
+  return c}
+function renderTree(center){
+  const inner=$("#inner");inner.innerHTML="";const id=S.focus;if(!id||!P(id)){return}
+  const links=[];const show3=$("#opt-gen3").checked,showSib=$("#opt-sibs").checked,showGK=$("#opt-gk").checked;
+  // ancestors: slots arrays
+  const lvl1=[father(id),mother(id)];
+  const lvl2=[lvl1[0]&&father(lvl1[0]),lvl1[0]&&mother(lvl1[0]),lvl1[1]&&father(lvl1[1]),lvl1[1]&&mother(lvl1[1])];
+  const lvl3=[];lvl2.forEach(x=>{lvl3.push(x&&father(x),x&&mother(x))});
+  const addParent=(child,role)=>()=>openAddRelative(child,role);
+  const mkGen=(arr,cls,childArr)=>{const g=el("div",{class:"gen "+cls});arr.forEach((pid,i)=>{const child=childArr?childArr[Math.floor(i/2)]:id;const role=i%2===0?"father":"mother";
+      g.append(el("div",{class:"slot"},card(pid,{add:child&&P(child)?{label:role==="father"?"אב":"אם",fn:addParent(child,role)}:null})))});return g};
+  if(show3&&lvl3.some(Boolean))inner.append(mkGen(lvl3,"g3",lvl2));
+  if(lvl2.some(Boolean)||lvl1.some(Boolean))inner.append(mkGen(lvl2,"g2",lvl1));
+  inner.append(mkGen(lvl1,"g1",null));
+  // focus row
+  const row=el("div",{class:"row"});
+  const sibs=showSib?siblingsOf(id).sort(byBirth):[];
+  const fy=yearOf(P(id).birthDate)||0;
+  const older=sibs.filter(s=>(yearOf(P(s).birthDate)||9999)<fy),younger=sibs.filter(s=>!older.includes(s));
+  older.forEach(s=>row.append(card(s,{small:true})));
+  row.append(card(id,{focus:true}));
+  younger.forEach(s=>row.append(card(s,{small:true})));
+  const sf=spouseFams(id);
+  sf.forEach(f=>{const sp=spouseIn(f,id);row.append(card(sp,{add:{label:"בן/בת זוג",fn:()=>openAddRelative(id,"spouse",f.id)}}))});
+  if(!sf.length&&S.canWrite)row.append(card(null,{add:{label:"בן/בת זוג",fn:()=>openAddRelative(id,"spouse")}}));
+  inner.append(row);
+  // children rows
+  const kidsRow=el("div",{class:"row"});const gkRow=el("div",{class:"row"});let anyKids=false;
+  sf.forEach(f=>{const kids=(f.children||[]).filter(P).sort(byBirth);const grp=el("div",{class:"group","data-fam":f.id});
+    const sp=spouseIn(f,id);if(sf.length>1)grp.append(el("div",{class:"groupcap",text:sp?"עם "+shortName(P(sp)):"הורה יחיד"}));
+    const kd=el("div",{class:"kids"});kids.forEach(k=>{kd.append(card(k));anyKids=true});
+    if(S.canWrite)kd.append(card(null,{add:{label:"ילד/ה",fn:()=>openAddRelative(id,"child",f.id)}}));
+    grp.append(kd);kidsRow.append(grp);
+    if(showGK)kids.forEach(k=>{const gks=childrenOf(k).sort(byBirth);if(gks.length){const g2=el("div",{class:"group"},el("div",{class:"groupcap",text:"ילדי "+shortName(P(k))}),el("div",{class:"kids"},gks.map(g=>card(g,{small:true}))));gkRow.append(g2)}})});
+  if(!sf.length&&S.canWrite){kidsRow.append(card(null,{add:{label:"ילד/ה",fn:()=>openAddRelative(id,"child")}}))}
+  if(kidsRow.children.length)inner.append(kidsRow);
+  if(showGK&&gkRow.children.length)inner.append(gkRow);
+  // links
+  const svgNS="http://www.w3.org/2000/svg";const svg=document.createElementNS(svgNS,"svg");svg.setAttribute("class","links");inner.prepend(svg);
+  requestAnimationFrame(()=>{drawLinks(svg,inner);if(center)centerOn(id)})}
+function box(e,inner){let x=0,y=0,n=e;while(n&&n!==inner){x+=n.offsetLeft;y+=n.offsetTop;n=n.offsetParent}return{x,y,w:e.offsetWidth,h:e.offsetHeight}}
+function drawLinks(svg,inner){svg.innerHTML="";svg.setAttribute("width",inner.scrollWidth);svg.setAttribute("height",inner.scrollHeight);
+  const cardEl=id=>inner.querySelector(`.card[data-id="${CSS.escape(id)}"]`);
+  const families=new Set();inner.querySelectorAll(".card[data-id]").forEach(c=>{const id=c.dataset.id;(S.famc[id]||[]).forEach(f=>families.add(f))});
+  for(const fid of families){const f=S.fams[fid];if(!f)continue;const pe=[f.husb,f.wife].map(x=>x&&cardEl(x)).filter(Boolean);const ce=(f.children||[]).map(cardEl).filter(Boolean);
+    if(!pe.length||!ce.length)continue;
+    const pb=pe.map(e=>box(e,inner)),cb=ce.map(e=>box(e,inner));
+    const py=Math.max(...pb.map(b=>b.y+b.h));const cy=Math.min(...cb.map(b=>b.y));
+    if(cy<=py)continue;
+    const midY=py+(cy-py)/2;const px=pb.reduce((a,b)=>a+b.x+b.w/2,0)/pb.length;
+    let d="";pb.forEach(b=>{d+=`M${b.x+b.w/2},${b.y+b.h} V${midY} `});
+    if(pb.length===2)d+=`M${pb[0].x+pb[0].w/2},${midY} H${pb[1].x+pb[1].w/2} `;
+    const xs=cb.map(b=>b.x+b.w/2);const minX=Math.min(px,...xs),maxX=Math.max(px,...xs);
+    d+=`M${minX},${midY} H${maxX} `;cb.forEach(b=>{d+=`M${b.x+b.w/2},${midY} V${b.y} `});
+    const path=document.createElementNS("http://www.w3.org/2000/svg","path");path.setAttribute("d",d);if(f.uncertain)path.setAttribute("class","uncertain");svg.append(path)}
+  // couple connectors in focus row
+  const fc=inner.querySelector(".card.focus");if(fc){const fb=box(fc,inner);spouseFams(S.focus).forEach(f=>{const sp=spouseIn(f,S.focus);const se=sp&&cardEl(sp);if(!se)return;const sb=box(se,inner);const y=fb.y+fb.h/2;const x1=fb.x<sb.x?fb.x+fb.w:fb.x,x2=fb.x<sb.x?sb.x:sb.x+sb.w;const path=document.createElementNS("http://www.w3.org/2000/svg","path");path.setAttribute("d",`M${x1},${y} H${x2}`);svg.append(path);
+      const grp=inner.querySelector(`.group[data-fam="${CSS.escape(f.id)}"]`);if(grp){const kids=[...grp.querySelectorAll(".kids > .card")];if(kids.length){const kb=kids.map(k=>box(k,inner));const sx=(x1+x2)/2;const top=Math.min(...kb.map(b=>b.y));const midY=y+(top-y)*0.62;let d=`M${sx},${y} V${midY} `;const xs=kb.map(b=>b.x+b.w/2);d+=`M${Math.min(sx,...xs)},${midY} H${Math.max(sx,...xs)} `;kb.forEach(b=>d+=`M${b.x+b.w/2},${midY} V${b.y} `);const p2=document.createElementNS("http://www.w3.org/2000/svg","path");p2.setAttribute("d",d);svg.append(p2)}}})}}
+function applyT(){$("#inner").style.transform=`translate(${S.tx}px,${S.ty}px) scale(${S.sc})`}
+function centerOn(id){const inner=$("#inner"),cv=$("#canvas");const c=inner.querySelector(`.card[data-id="${CSS.escape(id)}"]`);if(!c)return;const b=box(c,inner);
+  const fitW=cv.clientWidth/(inner.scrollWidth+40);S.sc=Math.max(.45,Math.min(1,fitW<1?Math.max(fitW,.6):1));
+  S.tx=cv.clientWidth/2-(b.x+b.w/2)*S.sc;S.ty=cv.clientHeight*0.45-(b.y+b.h/2)*S.sc;applyT()}
+(function panzoom(){const cv=$("#canvas");let drag=null;
+  cv.addEventListener("pointerdown",e=>{if(e.target.closest(".card"))return;drag={x:e.clientX,y:e.clientY,tx:S.tx,ty:S.ty};cv.setPointerCapture(e.pointerId);cv.classList.add("dragging")});
+  cv.addEventListener("pointermove",e=>{if(!drag)return;S.tx=drag.tx+e.clientX-drag.x;S.ty=drag.ty+e.clientY-drag.y;applyT()});
+  const end=()=>{drag=null;cv.classList.remove("dragging")};cv.addEventListener("pointerup",end);cv.addEventListener("pointercancel",end);
+  cv.addEventListener("wheel",e=>{e.preventDefault();const r=cv.getBoundingClientRect();zoomAt(e.clientX-r.left,e.clientY-r.top,e.deltaY<0?1.12:1/1.12)},{passive:false});
+  $("#z-in").onclick=()=>zoomAt(cv.clientWidth/2,cv.clientHeight/2,1.2);$("#z-out").onclick=()=>zoomAt(cv.clientWidth/2,cv.clientHeight/2,1/1.2);$("#z-fit").onclick=()=>centerOn(S.focus);})();
+function zoomAt(x,y,k){const ns=Math.max(.25,Math.min(2.2,S.sc*k));S.tx=x-(x-S.tx)*(ns/S.sc);S.ty=y-(y-S.ty)*(ns/S.sc);S.sc=ns;applyT()}
+["opt-sibs","opt-gk","opt-gen3"].forEach(i=>$("#"+i).addEventListener("change",()=>renderTree(true)));
+function setFocus(id){if(!P(id))return;S.focus=id;try{history.replaceState(null,"","#"+id)}catch(e){location.hash=id}
+  if(S.view!=="tree")renderPanel();else renderAll(true)}
+function restoreHash(){const h=(location.hash||"").slice(1);if(/^[A-Za-z0-9]+$/.test(h))S.focus=h}
+window.addEventListener("hashchange",()=>{const h=location.hash.slice(1);if(h&&P(h)&&h!==S.focus){S.focus=h;renderAll(true)}});
+
+/* ---------- profile panel ---------- */
+function chip(id,label){const p=P(id);return el("button",{class:"chip",onclick:()=>setFocus(id),title:label||""},el("span",{class:"dot "+(p?.sex||"")}),shortName(p)+(label?` · ${label}`:""),el("small",{text:" "+lifespan(p)}))}
+function renderPanel(){
+  const pn=$("#panel");pn.innerHTML="";const id=S.focus;const p=P(id);
+  if(!p){pn.append(el("p",{class:"hint",text:"בחר/י אדם מהעץ או מהחיפוש כדי לראות את הפרטים שלו."}));return}
+  const head=el("div",{class:"prof-head"},avatar(p),el("div",{},el("h2",{text:fullName(p)}),el("div",{class:"sub",text:[lifespan(p),p.marriedName?"לאחר נישואין: "+p.marriedName:"",p.suffix].filter(Boolean).join(" · ")}),p.uncertain?el("span",{class:"pill",text:"קשר משוער – דורש אימות"}):null));
+  pn.append(head);
+  if(S.canWrite)pn.append(el("div",{class:"actions"},el("button",{class:"btn small primary",onclick:()=>openEdit(id)},"עריכת פרטים"),el("button",{class:"btn small",onclick:()=>$("#file-photo").click()},"הוספת תמונה"),el("button",{class:"btn small",onclick:()=>openDocUpload(id)},"הוספת מסמך"),el("button",{class:"btn small",onclick:()=>openRel(id)},"מה הקשר אליו?")));
+  else pn.append(el("div",{class:"actions"},el("button",{class:"btn small",onclick:()=>openRel(id)},"מה הקשר אליו?")));
+  // facts
+  const facts=el("dl",{class:"facts"});const add=(k,v)=>{if(v){facts.append(el("dt",{text:k}),el("dd",{text:v}))}};
+  add("לידה",[fmtDate(p.birthDate),p.birthPlace].filter(Boolean).join(", "));
+  if(p.deceased||p.deathDate)add("פטירה",[fmtDate(p.deathDate),p.deathPlace].filter(Boolean).join(", ")||"נפטר/ה");
+  add("קבורה",p.burialPlace);add("מקצוע",p.occupation);add("מגורים",p.residence);
+  if(facts.children.length)pn.append(el("div",{class:"sect"},el("h3",{text:"פרטים"}),facts));
+  // photos
+  const ph=p.photos||[];
+  if(ph.length){const g=el("div",{class:"photos"});ph.forEach((x,i)=>{const fig=el("figure",{},(()=>{const im=driveImg(x.driveId,x.caption||fullName(p));im.onclick=()=>openLightbox(x,p);return im})());
+      if(S.canWrite)fig.append(el("div",{class:"ph-tools"},x.primary?null:el("button",{onclick:()=>setPrimaryPhoto(id,i)},"ראשית"),el("button",{onclick:()=>removePhoto(id,i)},"הסר")));g.append(fig)});
+    pn.append(el("div",{class:"sect"},el("h3",{text:"תמונות"}),g))}
+  const dc=p.docs||[];
+  if(dc.length){const s=el("div",{class:"sect"},el("h3",{text:`מסמכים (${dc.length})`}));const ul=el("div",{class:"docs"});
+    dc.slice().sort((a,b)=>String(a.date||"").localeCompare(String(b.date||""))).forEach(d=>{const i=dc.indexOf(d);const isImg=/^image\//.test(d.contentType||"");
+      const row=el("div",{class:"docrow"},el("span",{class:"docicon",text:isImg?"🖼":"📄"}),
+        el("div",{class:"docmain"},isImg?el("button",{class:"doclink",onclick:()=>openLightbox({driveId:d.driveId,caption:d.title},p)},d.title||"מסמך"):el("a",{class:"doclink",href:"https://drive.google.com/file/d/"+d.driveId+"/view",target:"_blank",rel:"noopener"},d.title||"מסמך"),
+          el("div",{class:"hint",text:[fmtDate(d.date),d.note].filter(Boolean).join(" · ")})),
+        S.canWrite?el("button",{class:"btn small",onclick:()=>openDocEdit(id,i)},"עריכה"):null);ul.append(row)});
+    s.append(ul);pn.append(s)}
+  if((p.remotePhotos||[]).length){const s=el("div",{class:"sect"},el("h3",{text:"תמונות ב-MyHeritage"}),el("p",{class:"hint",text:`יש ${p.remotePhotos.length} תמונות באתר MyHeritage. הן לא נטענות כאן; אפשר לשמור אותן ולהעלות דרך ״הוספת תמונה״.`}));
+    const ch=el("div",{class:"chips"});p.remotePhotos.forEach((u,i)=>ch.append(el("a",{class:"chip",href:u,target:"_blank",rel:"noopener"},"תמונה "+(i+1))));s.append(ch);pn.append(s)}
+  // family
+  const fam=el("div",{class:"sect"},el("h3",{text:"משפחה"}));
+  const par=parentsOf(id);if(par.length)fam.append(el("div",{class:"hint",text:"הורים"}),el("div",{class:"chips"},par.map(x=>chip(x))));
+  const sb=siblingsOf(id).sort(byBirth);if(sb.length)fam.append(el("div",{class:"hint",text:"אחים ואחיות"}),el("div",{class:"chips"},sb.map(x=>chip(x))));
+  spouseFams(id).forEach(f=>{const sp=spouseIn(f,id);fam.append(el("div",{class:"hint",text:(sp?gword(P(sp),"בן זוג","בת זוג","בן/בת זוג"):"משפחה")+(f.marrDate?` · נישואין ${fmtDate(f.marrDate)}`:"")+(f.uncertain?" · משוער":"")}));
+    const ch=el("div",{class:"chips"});if(sp)ch.append(chip(sp));fam.append(ch);
+    const kids=(f.children||[]).filter(P).sort(byBirth);if(kids.length)fam.append(el("div",{class:"hint",text:"ילדים"}),el("div",{class:"chips"},kids.map(x=>chip(x))));
+    if(S.canWrite)fam.append(el("div",{},el("button",{class:"btn small",onclick:()=>openFamEdit(f.id)},"עריכת קשר זה")))});
+  if(S.canWrite){fam.append(el("div",{class:"hint",text:"הוספת קרוב משפחה"}),el("div",{class:"addgrid"},
+    el("button",{class:"btn small",onclick:()=>openAddRelative(id,"father")},"אב"),el("button",{class:"btn small",onclick:()=>openAddRelative(id,"mother")},"אם"),
+    el("button",{class:"btn small",onclick:()=>openAddRelative(id,"spouse")},"בן/בת זוג"),el("button",{class:"btn small",onclick:()=>openAddRelative(id,"child")},"ילד/ה"),
+    el("button",{class:"btn small",onclick:()=>openAddRelative(id,"sibling")},"אח/ות")))}
+  pn.append(fam);
+  if(p.notes)pn.append(el("div",{class:"sect"},el("h3",{text:"הערות"}),el("div",{class:"note",text:p.notes})));
+  const srcs=p.sources||[];if(srcs.length){const s=el("div",{class:"sect"},el("h3",{text:`מקורות (${srcs.length})`}));
+    srcs.forEach(x=>{const d=el("details",{class:"src"},el("summary",{text:[x.title,x.author&&"("+x.author+")"].filter(Boolean).join(" ")||"מקור"}));if(x.page)d.append(el("p",{text:x.page}));if(x.text)d.append(el("p",{text:x.text}));s.append(d)});pn.append(s)}
+  if(S.canWrite)pn.append(el("div",{},el("button",{class:"btn small danger",onclick:()=>confirmDelete(id)},"מחיקת האדם מהעץ")));
+}
+function openLightbox(x,p){openDialog(el("div",{class:"lightbox"},driveImg(x.driveId,x.caption||"")),el("div",{class:"hint",text:x.caption||fullName(p)}),el("div",{class:"foot"},el("button",{class:"btn",onclick:closeDialog},"סגירה")))}
+
+/* ---------- photos ---------- */
+$("#file-photo").addEventListener("change",async e=>{const files=[...e.target.files];e.target.value="";const p=P(S.focus);if(!p||!files.length)return;
+  let folder;try{folder=await subFolder("תמונות")}catch(err){if(!(err instanceof NeedAuth))toast("לא הצלחתי לפתוח את תיקיית התמונות ב-Drive.",true);return}
+  const ph=[...(p.photos||[])];for(const f of files){try{toast("מעלה את "+f.name+"…");const r=await driveUpload(f,fullName(p)+" - "+f.name,folder);ph.push({driveId:r.id,caption:f.name.replace(/\.[^.]+$/,""),mime:r.mimeType||f.type,primary:!ph.length})}catch(err){toast("ההעלאה נכשלה: "+(err.message||err),true)}}
+  await savePerson({...P(S.focus)||p,photos:ph});toast("התמונות נשמרו ב-Drive.")});
+async function setPrimaryPhoto(id,i){const p=P(id);const ph=(p.photos||[]).map((x,j)=>({...x,primary:j===i}));await savePerson({...p,photos:ph})}
+async function removePhoto(id,i){const p=P(id);const ph=[...(p.photos||[])];const [rm]=ph.splice(i,1);if(rm?.primary&&ph[0])ph[0]={...ph[0],primary:true};await savePerson({...p,photos:ph});if(rm?.driveId){try{await driveTrash(rm.driveId)}catch(e){}}}
+
+/* ---------- documents ---------- */
+function openDocUpload(id){const p=P(id);const extra=new Set();
+  const fin=el("input",{type:"file",id:"doc-file",accept:".pdf,application/pdf,image/*",multiple:true});
+  const chips=el("div",{class:"multi"});const drawChips=()=>{chips.innerHTML="";chips.append(el("span",{class:"chip"},shortName(p)));extra.forEach(x=>chips.append(el("span",{class:"chip"},shortName(P(x)),el("button",{type:"button",class:"btn small",onclick:()=>{extra.delete(x);drawChips()}},"×"))))};
+  const pk=picker("doc-who","לחבר את המסמך גם לאדם נוסף…",v=>{if(v!==id)extra.add(v);pk.querySelector("input").value="";drawChips()});drawChips();
+  openDialog(el("h2",{text:"הוספת מסמך ל"+fullName(p)}),el("p",{class:"hint",text:"PDF או תמונה של מסמך (סריקה/צילום), עד 20MB לקובץ. קובץ Word צריך לשמור קודם כ-PDF."}),
+    el("div",{class:"form"},el("label",{class:"full"},"קובץ",fin),field("כותרת (למשל: תעודת לידה)","doc-title","",{full:true}),field("תאריך המסמך","doc-date","",{extra:{placeholder:"למשל 1932 או 27 JUL 1932"}}),field("הערה","doc-note",""),
+      el("label",{class:"full"},"מחובר ל:",chips,pk)),
+    el("div",{class:"foot"},el("button",{class:"btn primary",id:"doc-go",onclick:async()=>{const files=[...fin.files];if(!files.length){toast("בחר/י קובץ.",true);return}
+      const title=$("#doc-title").value.trim(),date=$("#doc-date").value.trim(),note=$("#doc-note").value.trim();$("#doc-go").disabled=true;
+      let folder;try{folder=await subFolder("מסמכים")}catch(err){$("#doc-go").disabled=false;if(!(err instanceof NeedAuth))toast("לא הצלחתי לפתוח את תיקיית המסמכים ב-Drive.",true);return}
+      const added=[];for(const f of files){try{toast("מעלה את "+f.name+"…");const r=await driveUpload(f,fullName(p)+" - "+(title||f.name.replace(/\.[^.]+$/,""))+(f.name.match(/\.[a-z0-9]+$/i)||[""])[0],folder);added.push({driveId:r.id,title:files.length>1||!title?(title?title+" – ":"")+f.name.replace(/\.[^.]+$/,""):title,date,note,contentType:r.mimeType||f.type,added:new Date().toISOString().slice(0,10)})}catch(err){toast("ההעלאה של "+f.name+" נכשלה: "+(err.message||err),true)}}
+      closeDialog();if(!added.length)return;for(const pid of [id,...extra]){const q=P(pid);if(q)await savePerson({...q,docs:[...(q.docs||[]),...added]})}toast(added.length>1?`${added.length} מסמכים נשמרו.`:"המסמך נשמר.")}},"העלאה"),el("button",{class:"btn",onclick:closeDialog},"ביטול")))}
+function openDocEdit(id,i){const p=P(id);const d=(p.docs||[])[i];if(!d)return;
+  openDialog(el("h2",{text:"עריכת מסמך"}),el("div",{class:"form"},field("כותרת","de-title",d.title,{full:true}),field("תאריך","de-date",d.date),field("הערה","de-note",d.note)),
+    el("div",{class:"foot"},el("button",{class:"btn primary",onclick:async()=>{const docs=[...p.docs];docs[i]={...d,title:$("#de-title").value.trim(),date:$("#de-date").value.trim(),note:$("#de-note").value.trim()};closeDialog();await savePerson({...p,docs});toast("נשמר.")}},"שמירה"),
+      el("button",{class:"btn danger",onclick:async()=>{const docs=[...p.docs];docs.splice(i,1);closeDialog();await savePerson({...p,docs});toast("המסמך הוסר מהכרטיס של "+shortName(p)+".")}},"הסרה מהכרטיס"),
+      el("button",{class:"btn",onclick:closeDialog},"ביטול")))}
+
+/* ---------- dialogs ---------- */
+function openDialog(...kids){const b=$("#dlgbody");b.innerHTML="";kids.forEach(k=>k&&b.append(k));const d=$("#dlg");if(!d.open)d.showModal()}
+function closeDialog(){const d=$("#dlg");if(d.open)d.close()}
+function field(label,id,val,attrs={}){return el("label",{class:attrs.full?"full":""},label,attrs.textarea?el("textarea",{id,...attrs.extra},val||""):attrs.select?(()=>{const s=el("select",{id});attrs.select.forEach(([v,t])=>s.append(el("option",{value:v,selected:v===val},t)));return s})():el("input",{id,value:val||"",...attrs.extra}))}
+function personForm(p){return el("div",{class:"form"},
+  field("שם פרטי","f-given",p.given),field("שם משפחה","f-surname",p.surname),
+  field("שם לאחר נישואין / שם נוסף","f-married",p.marriedName),field("מין","f-sex",p.sex||"U",{select:[["M","זכר"],["F","נקבה"],["U","לא ידוע"]]}),
+  field("תאריך לידה","f-bdate",p.birthDate,{extra:{placeholder:"למשל 27 JUL 1932 או 1932"}}),field("מקום לידה","f-bplace",p.birthPlace),
+  el("label",{class:"check full"},el("input",{type:"checkbox",id:"f-dec",checked:!!p.deceased}),"נפטר/ה"),
+  field("תאריך פטירה","f-ddate",p.deathDate),field("מקום פטירה","f-dplace",p.deathPlace),
+  field("מקום קבורה","f-burial",p.burialPlace),field("מקצוע","f-occ",p.occupation),
+  field("מגורים","f-res",p.residence,{full:true}),
+  field("הערות וסיפורים","f-notes",p.notes,{full:true,textarea:true}),
+  el("label",{class:"check full"},el("input",{type:"checkbox",id:"f-unc",checked:!!p.uncertain}),"הקשר של האדם הזה משוער ודורש אימות"))}
+function readForm(p){const g=i=>($("#"+i)?.value||"").trim();return{...p,given:g("f-given"),surname:g("f-surname"),marriedName:g("f-married"),sex:g("f-sex")||"U",birthDate:g("f-bdate"),birthPlace:g("f-bplace"),deceased:$("#f-dec").checked||!!g("f-ddate"),deathDate:g("f-ddate"),deathPlace:g("f-dplace"),burialPlace:g("f-burial"),occupation:g("f-occ"),residence:g("f-res"),notes:$("#f-notes").value,uncertain:$("#f-unc").checked}}
+const blank=()=>({given:"",surname:"",marriedName:"",suffix:"",sex:"U",birthDate:"",birthPlace:"",deceased:false,deathDate:"",deathPlace:"",burialPlace:"",occupation:"",residence:"",notes:"",sources:[],remotePhotos:[],photos:[],docs:[],uncertain:false});
+function openEdit(id){const p=P(id);openDialog(el("h2",{text:"עריכת "+fullName(p)}),personForm(p),el("div",{class:"foot"},
+  el("button",{class:"btn primary",onclick:async()=>{const np=readForm(p);if(!np.given&&!np.surname){toast("צריך לפחות שם פרטי או שם משפחה.",true);return}closeDialog();if(await savePerson(np))toast("נשמר.")}},"שמירה"),el("button",{class:"btn",onclick:closeDialog},"ביטול")))}
+
+/* person picker */
+function picker(id,ph,onPick,initial){const wrap=el("div",{class:"picker"});const inp=el("input",{id,type:"search",placeholder:ph,autocomplete:"off",value:initial?fullName(P(initial)):""});const res=el("div",{class:"results"});wrap.append(inp,res);wrap.dataset.value=initial||"";
+  inp.addEventListener("input",()=>{const r=searchPeople(inp.value,12);res.innerHTML="";r.forEach(pid=>res.append(el("button",{type:"button",onclick:()=>{wrap.dataset.value=pid;inp.value=fullName(P(pid));res.classList.remove("open");onPick&&onPick(pid)}},el("span",{text:fullName(P(pid))}),el("small",{text:lifespan(P(pid))}))));res.classList.toggle("open",r.length>0)});
+  return wrap}
+const ROLE_LABEL={father:"אב",mother:"אם",spouse:"בן/בת זוג",child:"ילד/ה",sibling:"אח/ות"};
+function openAddRelative(id,role,famId){if(!S.canWrite)return;const p=P(id);let mode="new";
+  const np=blank();if(role==="father"){np.sex="M";np.surname=p.surname}if(role==="mother")np.sex="F";if(role==="child"||role==="sibling"){np.surname=p.sex==="F"&&role==="child"?"":p.surname}
+  if(role==="spouse")np.sex=p.sex==="M"?"F":p.sex==="F"?"M":"U";
+  const formBox=el("div",{},personForm(np));const pick=picker("pick-exist","חיפוש אדם שכבר נמצא בעץ…");const pickBox=el("div",{style:"display:none"},pick);
+  let famSel=null;const sf=spouseFams(id);
+  if(role==="child"&&sf.length>1&&!famId){famSel=el("select",{id:"f-fam"});sf.forEach(f=>{const sp=spouseIn(f,id);famSel.append(el("option",{value:f.id},sp?"עם "+fullName(P(sp)):"הורה יחיד"))})}
+  const tabs=el("div",{class:"tabs"},el("button",{type:"button","aria-pressed":"true",onclick:e=>{mode="new";tabs.children[0].setAttribute("aria-pressed","true");tabs.children[1].setAttribute("aria-pressed","false");formBox.style.display="";pickBox.style.display="none"}},"אדם חדש"),el("button",{type:"button","aria-pressed":"false",onclick:()=>{mode="exist";tabs.children[1].setAttribute("aria-pressed","true");tabs.children[0].setAttribute("aria-pressed","false");formBox.style.display="none";pickBox.style.display=""}},"אדם קיים בעץ"));
+  openDialog(el("h2",{text:`הוספת ${ROLE_LABEL[role]} ל${fullName(p)}`}),tabs,famSel?el("label",{class:"hint"},"עם איזה בן/בת זוג? ",famSel):null,formBox,pickBox,el("div",{class:"foot"},
+    el("button",{class:"btn primary",onclick:async()=>{let rid;
+      if(mode==="new"){const n=readForm({...np,id:uid("P")});if(!n.given&&!n.surname){toast("צריך לפחות שם פרטי או שם משפחה.",true);return}closeDialog();if(!await savePerson(n))return;rid=n.id}
+      else{rid=pick.dataset.value;if(!rid||rid===id){toast("בחר/י אדם מהרשימה.",true);return}closeDialog()}
+      await linkRelative(id,role,rid,famSel?famSel.value:famId);toast("נוסף לעץ.")}},"הוספה"),el("button",{class:"btn",onclick:closeDialog},"ביטול")))}
+async function linkRelative(id,role,rid,famId){const p=P(id),r=P(rid);
+  if(role==="father"||role==="mother"){const key=role==="father"?"husb":"wife";let f=birthFam(id);
+    if(f&&!f[key]){await saveFam({...f,[key]:rid})}else if(f&&f[key]){toast("כבר רשום "+ROLE_LABEL[role]+". נוצרה משפחה נוספת.",true);await saveFam({id:uid("F"),husb:key==="husb"?rid:"",wife:key==="wife"?rid:"",children:[id],marrDate:"",marrPlace:"",divorced:false,uncertain:false,notes:""})}
+    else await saveFam({id:uid("F"),husb:key==="husb"?rid:"",wife:key==="wife"?rid:"",children:[id],marrDate:"",marrPlace:"",divorced:false,uncertain:false,notes:""})}
+  else if(role==="spouse"){const f=famId&&S.fams[famId];if(f&&!spouseIn(f,id)){const key=f.husb===id?"wife":"husb";await saveFam({...f,[key]:rid})}else{const male=p.sex==="M"||(p.sex!=="F"&&r.sex==="F");await saveFam({id:uid("F"),husb:male?id:rid,wife:male?rid:id,children:[],marrDate:"",marrPlace:"",divorced:false,uncertain:false,notes:""})}}
+  else if(role==="child"){let f=famId&&S.fams[famId];if(!f){const sf=spouseFams(id);f=sf[0]}
+    if(f)await saveFam({...f,children:[...new Set([...(f.children||[]),rid])]});else await saveFam({id:uid("F"),husb:p.sex==="F"?"":id,wife:p.sex==="F"?id:"",children:[rid],marrDate:"",marrPlace:"",divorced:false,uncertain:false,notes:""})}
+  else if(role==="sibling"){let f=birthFam(id);if(f)await saveFam({...f,children:[...new Set([...(f.children||[]),rid])]});else await saveFam({id:uid("F"),husb:"",wife:"",children:[id,rid],marrDate:"",marrPlace:"",divorced:false,uncertain:false,notes:""})}}
+function openFamEdit(fid){const f=S.fams[fid];const names=[f.husb,f.wife].filter(x=>x&&P(x)).map(x=>shortName(P(x))).join(" ו");
+  const kidsBox=el("div",{class:"chips"});(f.children||[]).filter(P).forEach(k=>kidsBox.append(el("span",{class:"chip"},shortName(P(k)),el("button",{class:"btn small danger",type:"button",onclick:async()=>{closeDialog();await saveFam({...S.fams[fid],children:(S.fams[fid].children||[]).filter(x=>x!==k)});toast("הקשר הוסר.")}},"הסרה"))));
+  openDialog(el("h2",{text:"משפחה: "+(names||"ללא הורים")}),el("div",{class:"form"},field("תאריך נישואין","ff-date",f.marrDate),field("מקום נישואין","ff-place",f.marrPlace),
+    el("label",{class:"check full"},el("input",{type:"checkbox",id:"ff-div",checked:!!f.divorced}),"התגרשו"),el("label",{class:"check full"},el("input",{type:"checkbox",id:"ff-unc",checked:!!f.uncertain}),"קשר משוער"),field("הערות","ff-notes",f.notes,{full:true,textarea:true})),
+    el("div",{class:"hint",text:"ילדים במשפחה (הסרה מנתקת את הקשר בלבד):"}),kidsBox,
+    el("div",{class:"foot"},el("button",{class:"btn primary",onclick:async()=>{const nf={...f,marrDate:$("#ff-date").value.trim(),marrPlace:$("#ff-place").value.trim(),divorced:$("#ff-div").checked,uncertain:$("#ff-unc").checked,notes:$("#ff-notes").value};closeDialog();await saveFam(nf);toast("נשמר.")}},"שמירה"),
+      el("button",{class:"btn danger",onclick:()=>{openDialog(el("h2",{text:"לנתק את הקשר המשפחתי?"}),el("p",{text:"האנשים עצמם יישארו בעץ. רק הקשר בין בני הזוג וילדיהם יימחק."}),el("div",{class:"foot"},el("button",{class:"btn danger",onclick:async()=>{closeDialog();await delDoc("families",fid);toast("הקשר נמחק.")}},"כן, לנתק"),el("button",{class:"btn",onclick:closeDialog},"ביטול")))}},"ניתוק הקשר"),
+      el("button",{class:"btn",onclick:closeDialog},"ביטול")))}
+function confirmDelete(id){const p=P(id);openDialog(el("h2",{text:"למחוק את "+fullName(p)+"?"}),el("p",{text:"האדם יימחק מהעץ ויוסר מכל הקשרים המשפחתיים שלו. אי אפשר לבטל את זה."}),el("div",{class:"foot"},
+  el("button",{class:"btn danger",onclick:async()=>{closeDialog();for(const fid of[...(S.famc[id]||[]),...(S.fams_[id]||[])]){const f=S.fams[fid];if(!f)continue;const nf={...f,husb:f.husb===id?"":f.husb,wife:f.wife===id?"":f.wife,children:(f.children||[]).filter(x=>x!==id)};const members=[nf.husb,nf.wife,...nf.children].filter(Boolean);if(members.length<2)await delDoc("families",fid);else await saveFam(nf)}
+    const nb=parentsOf(id)[0]||childrenOf(id)[0]||siblingsOf(id)[0];await delDoc("people",id);S.focus=nb||Object.keys(S.people)[0]||null;renderAll(true);toast("נמחק.")}},"מחיקה"),el("button",{class:"btn",onclick:closeDialog},"ביטול")))}
+$("#btn-add").onclick=()=>{const np=blank();openDialog(el("h2",{text:"הוספת אדם חדש"}),el("p",{class:"hint",text:"אדם שמוסיפים כך לא מחובר לאף אחד. אחרי השמירה אפשר לחבר אותו דרך ״הוספת קרוב משפחה״ בכרטיס של אדם אחר, בלשונית ״אדם קיים בעץ״."}),personForm(np),el("div",{class:"foot"},
+  el("button",{class:"btn primary",onclick:async()=>{const n=readForm({...np,id:uid("P")});if(!n.given&&!n.surname){toast("צריך לפחות שם פרטי או שם משפחה.",true);return}closeDialog();if(await savePerson(n)){setFocus(n.id);toast("נוסף.")}}},"שמירה"),el("button",{class:"btn",onclick:closeDialog},"ביטול")))};
+
+/* ---------- search ---------- */
+function searchPeople(q,limit=20){const n=norm(q);if(!n)return[];const terms=n.split(" ");const out=[];
+  for(const p of Object.values(S.people)){const hay=norm([p.given,p.surname,p.marriedName,p.suffix,p.birthPlace].join(" "));if(terms.every(t=>hay.includes(t))){const nm=norm(fullName(p));out.push([p.id,nm.startsWith(terms[0])?0:1])}}
+  return out.sort((a,b)=>a[1]-b[1]||fullName(P(a[0])).localeCompare(fullName(P(b[0])),"he")).slice(0,limit).map(x=>x[0])}
+(function(){const q=$("#q"),r=$("#qres");let act=-1;
+  const draw=()=>{const ids=searchPeople(q.value);r.innerHTML="";act=-1;ids.forEach(id=>r.append(el("button",{onclick:()=>{pick(id)}},el("span",{text:fullName(P(id))}),el("small",{text:[lifespan(P(id)),P(id).birthPlace].filter(Boolean).join(" · ")}))));if(!ids.length&&q.value.trim())r.append(el("div",{class:"hint",style:"padding:8px 12px",text:"לא נמצא אדם בשם הזה."}));r.classList.toggle("open",!!q.value.trim())};
+  const pick=id=>{q.value="";r.classList.remove("open");if(S.view!=="tree")switchView("tree");setFocus(id)};
+  q.addEventListener("input",draw);q.addEventListener("keydown",e=>{const bs=[...r.querySelectorAll("button")];if(e.key==="ArrowDown"){act=Math.min(bs.length-1,act+1)}else if(e.key==="ArrowUp"){act=Math.max(0,act-1)}else if(e.key==="Enter"){(bs[act]||bs[0])?.click();return}else if(e.key==="Escape"){r.classList.remove("open");return}else return;e.preventDefault();bs.forEach((b,i)=>b.classList.toggle("active",i===act))});
+  document.addEventListener("click",e=>{if(!e.target.closest(".search"))r.classList.remove("open");if(!e.target.closest(".picker"))document.querySelectorAll(".picker .results").forEach(x=>x.classList.remove("open"))});})();
+
+/* ---------- views ---------- */
+function switchView(v){S.view=v;["tree","list","research"].forEach(x=>{$("#tab-"+x).setAttribute("aria-pressed",x===v);$("#view-"+x).classList.toggle("active",x===v)});renderAll(v==="tree")}
+$("#tab-tree").onclick=()=>switchView("tree");$("#tab-list").onclick=()=>switchView("list");$("#tab-research").onclick=()=>switchView("research");
+function renderList(){const w=$("#listwrap");w.innerHTML="";const ppl=Object.values(S.people);
+  const surn={};ppl.forEach(p=>{const s=(p.surname||"").trim();if(s)surn[s]=(surn[s]||0)+1});
+  const filt=el("input",{type:"search",id:"lf",placeholder:"סינון לפי שם או מקום…",value:S.listFilter||""});filt.addEventListener("input",()=>{S.listFilter=filt.value;drawTable()});
+  w.append(el("div",{class:"listtools"},el("h2",{text:"כל האנשים בעץ"}),filt));
+  const sb=el("div",{class:"surnames"});sb.append(el("button",{"aria-pressed":!S.listSurname,onclick:()=>{S.listSurname="";renderList()}},`הכול (${ppl.length})`));
+  Object.entries(surn).sort((a,b)=>b[1]-a[1]).slice(0,40).forEach(([s,c])=>sb.append(el("button",{"aria-pressed":S.listSurname===s,onclick:()=>{S.listSurname=s;renderList()}},`${s} (${c})`)));w.append(sb);
+  const tbl=el("table");const cols=[["name","שם"],["birth","לידה"],["bplace","מקום לידה"],["death","פטירה"],["rel","הורים"]];
+  const thead=el("thead",{},el("tr",{},cols.map(([k,t])=>el("th",{onclick:()=>{S.listSort={k,dir:S.listSort.k===k?-S.listSort.dir:1};drawTable()}},t+(S.listSort.k===k?(S.listSort.dir>0?" ▲":" ▼"):"")))));const tb=el("tbody");tbl.append(thead,tb);w.append(tbl);
+  function drawTable(){tb.innerHTML="";let rows=ppl.filter(p=>!S.listSurname||(p.surname||"").trim()===S.listSurname);const f=norm(S.listFilter);if(f)rows=rows.filter(p=>norm([p.given,p.surname,p.marriedName,p.birthPlace,p.deathPlace].join(" ")).includes(f));
+    const key={name:p=>fullName(p),birth:p=>yearOf(p.birthDate)||99999,bplace:p=>p.birthPlace||"תתת",death:p=>yearOf(p.deathDate)||99999,rel:p=>parentsOf(p.id).map(x=>fullName(P(x))).join()};const k=key[S.listSort.k];
+    rows.sort((a,b)=>{const x=k(a),y=k(b);return(typeof x==="number"?x-y:String(x).localeCompare(String(y),"he"))*S.listSort.dir});
+    rows.forEach(p=>tb.append(el("tr",{onclick:()=>{switchView("tree");setFocus(p.id)}},el("td",{},el("strong",{text:fullName(p)}),p.marriedName?el("div",{class:"hint",text:p.marriedName}):null),el("td",{class:"num",text:fmtDate(p.birthDate)}),el("td",{text:p.birthPlace||""}),el("td",{class:"num",text:fmtDate(p.deathDate)||(p.deceased?"נפטר/ה":"")}),el("td",{text:parentsOf(p.id).map(x=>shortName(P(x))).join(" ו")}))))}
+  drawTable()}
+function renderResearch(){const w=$("#research");w.innerHTML="";
+  w.append(el("div",{class:"listtools"},el("h2",{text:"יומן המחקר"}),S.canWrite?el("button",{class:"btn primary small",onclick:()=>openNote()},"רשומה חדשה"):null));
+  const notes=Object.values(S.research).sort((a,b)=>String(b.date||"").localeCompare(String(a.date||"")));
+  if(!notes.length)w.append(el("p",{class:"hint",text:"עוד אין רשומות מחקר. כאן אפשר לתעד ממצאים, מקורות ושאלות פתוחות."}));
+  notes.forEach(n=>w.append(el("article",{class:"rcard"},el("h3",{text:n.title||"ללא כותרת"}),el("div",{class:"date",text:n.date||""}),el("p",{text:n.text||""}),
+    S.canWrite?el("div",{class:"actions",style:"margin-top:8px"},el("button",{class:"btn small",onclick:()=>openNote(n)},"עריכה"),el("button",{class:"btn small danger",onclick:()=>delNote(n.id)},"מחיקה")):null)))}
+function openNote(n){n=n||{id:uid("R"),title:"",date:new Date().toISOString().slice(0,10),text:""};openDialog(el("h2",{text:"רשומת מחקר"}),el("div",{class:"form"},field("כותרת","rn-t",n.title,{full:true}),field("תאריך","rn-d",n.date),field("ממצא / הערה","rn-x",n.text,{full:true,textarea:true})),
+  el("div",{class:"foot"},el("button",{class:"btn primary",onclick:async()=>{const o={title:$("#rn-t").value.trim(),date:$("#rn-d").value.trim(),text:$("#rn-x").value};closeDialog();saveNote({...o,id:n.id})}},"שמירה"),el("button",{class:"btn",onclick:closeDialog},"ביטול")))}
+
+/* ---------- relationship ---------- */
+function ancestorsMap(id){const m=new Map([[id,{d:0,via:null}]]);const q=[id];while(q.length){const x=q.shift();const dx=m.get(x).d;for(const p of parentsOf(x)){if(!m.has(p)){m.set(p,{d:dx+1,via:x});q.push(p)}}}return m}
+function chainUp(m,from,to){const c=[to];let x=to;while(x!==from){x=m.get(x).via;if(!x)break;c.push(x)}return c.reverse()}
+const ord=["","ראשונה","שנייה","שלישית","רביעית","חמישית","שישית","שביעית"];
+function relLabel(A,B,a,b,half){const pb=P(B);const g=(m,f)=>gword(pb,m,f);
+  if(a===0){if(b===1)return g("אבא","אמא");if(b===2)return g("סבא","סבתא");if(b===3)return g("סבא רבא","סבתא רבתא");return g("אב קדמון","אם קדמונית")+` (${b} דורות למעלה)`}
+  if(b===0){if(a===1)return g("בן","בת");if(a===2)return g("נכד","נכדה");if(a===3)return g("נין","נינה");return g("צאצא","צאצאית")+` (${a} דורות למטה)`}
+  if(a===1&&b===1)return g("אח","אחות")+(half?" למחצה":"");
+  if(a===1)return b===2?g("דוד","דודה"):g("דוד","דודה")+" "+"רבא ".repeat(b-2).trim()+` (אח/ות של ${b===3?"סבא/סבתא":"אב קדמון"})`;
+  if(b===1)return a===2?g("אחיין","אחיינית"):g("צאצא","צאצאית")+` של ${gword(P(A),"אחיך","אחותך")} (${a-1} דורות למטה)`;
+  const deg=Math.min(a,b)-1,rem=Math.abs(a-b);return g("בן דוד","בת דודה")+` מדרגה ${ord[deg]||deg}`+(rem?` בהפרש ${rem===1?"דור אחד":rem+" דורות"}`:"")+(half?" (למחצה)":"")}
+// NOTE: a = generations from B up to common ancestor, b = generations from A up — label describes B relative to A.
+function relationship(A,B){if(A===B)return{label:"אותו אדם"};const ma=ancestorsMap(A),mb=ancestorsMap(B);let best=null;
+  for(const[x,ia]of ma){const ib=mb.get(x);if(ib){const s=ia.d+ib.d;if(!best||s<best.s)best={x,s,da:ia.d,db:ib.d}}}
+  if(best){const commons=[...ma.keys()].filter(x=>mb.has(x)&&ma.get(x).d===best.da&&mb.get(x).d===best.db);let half=false;if(best.da>0&&best.db>0&&commons.length<2){const ca=chainUp(ma,A,best.x),cb=chainUp(mb,B,best.x);const fa=birthFam(ca[ca.length-2]),fb=birthFam(cb[cb.length-2]);if(fa&&fb&&fa.id!==fb.id){const sa=fa.husb===best.x?fa.wife:fa.husb,sb=fb.husb===best.x?fb.wife:fb.husb;half=!!(sa&&sb&&P(sa)&&P(sb)&&sa!==sb)}}
+    // label: B relative to A. a = B's distance, b = A's distance
+    const label=relLabel(A,B,best.db,best.da,half);
+    return{label,lca:best.x,commons,chainA:chainUp(ma,A,best.x),chainB:chainUp(mb,B,best.x),blood:true,da:best.da,db:best.db}}
+  // by marriage: BFS over parent/child/spouse
+  const prev=new Map([[A,null]]);const q=[A];while(q.length){const x=q.shift();if(x===B)break;const nb=[...parentsOf(x),...childrenOf(x),...spouseFams(x).map(f=>spouseIn(f,x)).filter(Boolean)];for(const y of nb)if(!prev.has(y)){prev.set(y,x);q.push(y)}}
+  if(!prev.has(B))return{label:"לא נמצא קשר בעץ",none:true};const path=[];let x=B;while(x){path.push(x);x=prev.get(x)}path.reverse();return{label:"קשר דרך נישואים",path,blood:false}}
+function openRel(preB){let A=S.meta.rootPerson&&P(S.meta.rootPerson)?S.meta.rootPerson:S.focus,B=preB&&preB!==A?preB:null;
+  const out=el("div",{class:"relout"},el("div",{class:"hint",text:"בחר/י שני אנשים כדי לראות איך הם קשורים."}));
+  const run=()=>{out.innerHTML="";if(!A||!B){out.append(el("div",{class:"hint",text:"בחר/י שני אנשים."}));return}const r=relationship(A,B);
+    out.append(el("div",{class:"hint",text:`${fullName(P(B))} הוא/היא ביחס ל${fullName(P(A))}:`}),el("div",{class:"big",text:r.label}));
+    if(r.blood){const lca=P(r.lca);out.append(el("div",{class:"hint",text:`אב/אם קדמון משותף: ${fullName(lca)}${r.commons.length>1?" ו"+fullName(P(r.commons.find(x=>x!==r.lca))):""}`}));
+      const col=(t,ch)=>el("div",{},el("h4",{text:t}),el("ol",{},ch.slice().reverse().map(x=>el("li",{},el("a",{href:"#"+x,onclick:e=>{e.preventDefault();closeDialog();switchView("tree");setFocus(x)}},fullName(P(x))),el("span",{class:"hint",text:" "+lifespan(P(x))})))));
+      out.append(el("div",{class:"chain"},col("הקו של "+shortName(P(A)),r.chainA),col("הקו של "+shortName(P(B)),r.chainB)))}
+    else if(r.path){out.append(el("ol",{},r.path.map(x=>el("li",{text:fullName(P(x))}))))}};
+  const pa=picker("rel-a","אדם ראשון…",v=>{A=v;run()},A),pb=picker("rel-b","אדם שני…",v=>{B=v;run()},B);
+  openDialog(el("h2",{text:"מה הקשר?"}),el("div",{class:"form"},el("label",{},"אדם ראשון",pa),el("label",{},"אדם שני",pb)),out,el("div",{class:"foot"},el("button",{class:"btn",onclick:closeDialog},"סגירה")));run()}
+$("#btn-rel").onclick=()=>openRel(S.focus);
+
+/* ---------- GEDCOM ---------- */
+function parseGED(text){const lines=text.replace(/^﻿/,"").split(/\r?\n/);const recs={},order=[];let path=[];
+  for(const l of lines){const m=l.match(/^\s*(\d+) (@[^@]+@ )?(\S+) ?(.*)$/);if(!m)continue;const lv=+m[1],x=(m[2]||"").trim(),tag=m[3],val=m[4]||"";
+    if(lv===0){const cur={id:x,type:tag,val,items:[]};if(x){recs[x]=cur;order.push(x)}path=[cur];continue}
+    if((tag==="CONC"||tag==="CONT")&&path[lv-1]){path[lv-1].val+=(tag==="CONT"?"\n":"")+val;continue}
+    const node={tag,val,items:[]};path=path.slice(0,lv);if(!path[lv-1])continue;path[lv-1].items.push(node);path.push(node)}
+  const g=(n,t)=>(n?n.items:[]).filter(i=>i.tag===t);const v=(n,...ts)=>{for(const t of ts){const x=g(n,t);if(!x.length)return"";n=x[0]}return(n.val||"").trim()};
+  const clean=s=>{let t=String(s||"");const ta=document.createElement("textarea");for(let i=0;i<3;i++){ta.innerHTML=t;t=ta.value}return t.replace(/<br\s*\/?>/gi,"\n").replace(/<[^>]+>/g,"").replace(/[ \t]+/g," ").replace(/\n\s*\n+/g,"\n").trim()};
+  const nid=x=>String(x||"").replace(/@/g,"");const srcs={};order.forEach(k=>{const r=recs[k];if(r.type==="SOUR")srcs[k]={title:clean(v(r,"TITL")),author:clean(v(r,"AUTH"))}});
+  const people={},fams={};
+  order.forEach(k=>{const r=recs[k];if(r.type!=="INDI")return;const nm=g(r,"NAME")[0];let given=v(nm,"GIVN"),sur=v(nm,"SURN");if(!given&&!sur&&nm){const mm=nm.val.match(/([^/]*)\/?([^/]*)/);given=(mm[1]||"").trim();sur=(mm[2]||"").trim()}
+    const b=g(r,"BIRT")[0],d=g(r,"DEAT")[0],bu=g(r,"BURI")[0];
+    people[nid(k)]={...blank(),given:clean(given),surname:clean(sur),marriedName:clean(v(nm,"_MARNM")),suffix:clean(v(nm,"NSFX")),sex:v(r,"SEX")||"U",birthDate:v(b,"DATE"),birthPlace:clean(v(b,"PLAC")),deceased:!!d,deathDate:v(d,"DATE"),deathPlace:clean(v(d,"PLAC")),burialPlace:clean(v(bu,"PLAC")),occupation:clean(v(r,"OCCU")),notes:g(r,"NOTE").map(n=>clean(n.val)).filter(Boolean).join("\n\n"),
+      sources:g(r,"SOUR").map(s=>({title:(srcs[s.val.trim()]||{}).title||"",author:(srcs[s.val.trim()]||{}).author||"",page:clean(v(s,"PAGE")).slice(0,300),text:clean(v(s,"DATA","TEXT")).slice(0,700)})),remotePhotos:g(r,"OBJE").map(o=>v(o,"FILE")).filter(u=>/^https?:/.test(u)).slice(0,6)}});
+  order.forEach(k=>{const r=recs[k];if(r.type!=="FAM")return;const m=g(r,"MARR")[0];fams[nid(k)]={husb:nid(v(r,"HUSB")),wife:nid(v(r,"WIFE")),children:g(r,"CHIL").map(c=>nid(c.val)),marrDate:v(m,"DATE"),marrPlace:clean(v(m,"PLAC")),divorced:!!g(r,"DIV").length,uncertain:false,notes:""}});
+  return{people,families:fams}}
+function toGED(){const L=["0 HEAD","1 SOUR COHEN_TREE","2 NAME Cohen family tree page","1 GEDC","2 VERS 5.5.1","2 FORM LINEAGE-LINKED","1 CHAR UTF-8","1 DATE "+new Date().toUTCString().slice(5,16).toUpperCase()];
+  const esc=s=>String(s||"").replace(/\r?\n/g," ");const put=(lv,tag,val)=>{if(val==null||val==="")return;const lines=String(val).split(/\r?\n/);L.push(`${lv} ${tag} ${lines[0]}`);lines.slice(1).forEach(x=>L.push(`${lv+1} CONT ${x}`))};
+  for(const p of Object.values(S.people)){L.push(`0 @${p.id}@ INDI`);L.push(`1 NAME ${esc(p.given)} /${esc(p.surname)}/`);put(2,"GIVN",esc(p.given));put(2,"SURN",esc(p.surname));put(2,"_MARNM",esc(p.marriedName));put(2,"NSFX",esc(p.suffix));L.push(`1 SEX ${p.sex||"U"}`);
+    if(p.birthDate||p.birthPlace){L.push("1 BIRT");put(2,"DATE",p.birthDate);put(2,"PLAC",esc(p.birthPlace))}
+    if(p.deceased||p.deathDate){L.push(p.deathDate||p.deathPlace?"1 DEAT":"1 DEAT Y");put(2,"DATE",p.deathDate);put(2,"PLAC",esc(p.deathPlace))}
+    if(p.burialPlace){L.push("1 BURI");put(2,"PLAC",esc(p.burialPlace))}put(1,"OCCU",esc(p.occupation));if(p.residence){L.push("1 RESI");put(2,"ADDR",esc(p.residence))}put(1,"NOTE",p.notes);
+    (S.famc[p.id]||[]).forEach(f=>L.push(`1 FAMC @${f}@`));(S.fams_[p.id]||[]).forEach(f=>L.push(`1 FAMS @${f}@`))}
+  for(const f of Object.values(S.fams)){L.push(`0 @${f.id}@ FAM`);if(f.husb&&P(f.husb))L.push(`1 HUSB @${f.husb}@`);if(f.wife&&P(f.wife))L.push(`1 WIFE @${f.wife}@`);(f.children||[]).filter(P).forEach(c=>L.push(`1 CHIL @${c}@`));if(f.marrDate||f.marrPlace){L.push("1 MARR");put(2,"DATE",f.marrDate);put(2,"PLAC",esc(f.marrPlace))}if(f.divorced)L.push("1 DIV Y");put(1,"NOTE",f.notes)}
+  L.push("0 TRLR");return L.join("\r\n")}
+$("#btn-io").onclick=()=>{const canSave=true;
+  openDialog(el("h2",{text:"ייבוא וייצוא"}),
+    el("div",{class:"sect"},el("h3",{text:"ייצוא"}),el("p",{class:"hint",text:"קובץ GED אפשר לייבא ל-MyHeritage, Geni או כל תוכנת עץ משפחה. הגיבוי המלא (JSON) שומר הכול, כולל הערות, מסמכים ותמונות (קישורים ל-Drive)."}),
+      el("div",{class:"actions"},el("button",{class:"btn primary",disabled:!canSave,onclick:()=>exportFile("cohen-family-tree.ged",toGED())},"ייצוא קובץ GED"),el("button",{class:"btn",disabled:!canSave,onclick:()=>exportFile("cohen-family-tree-backup.json",JSON.stringify(packData(),null,1))},"גיבוי מלא (JSON)"),
+        el("button",{class:"btn",onclick:async e=>{try{await navigator.clipboard.writeText(toGED());e.target.textContent="הועתק"}catch(err){toast("ההעתקה לא הצליחה בדפדפן הזה.",true)}}},"העתקת GED")),
+      canSave?null:el("p",{class:"hint",text:"הורדה לא זמינה בתצוגה הזאת. אפשר להשתמש ב״העתקת GED״."})),
+    S.canWrite?el("div",{class:"sect"},el("h3",{text:"ייבוא"}),el("p",{class:"hint",text:Object.keys(S.people).length?"ייבוא קובץ GED או גיבוי JSON יחליף את כל העץ הקיים. כדאי לייצא גיבוי לפני כן.":"ייבוא קובץ GED (למשל מ-MyHeritage) או גיבוי JSON."}),el("button",{class:"btn",onclick:()=>$("#file-ged").click()},"בחירת קובץ לייבוא")):null,
+    el("div",{class:"foot"},el("button",{class:"btn",onclick:closeDialog},"סגירה")))};
+function exportFile(name,data){const u=URL.createObjectURL(new Blob([data],{type:"text/plain;charset=utf-8"}));const a=el("a",{href:u,download:name});document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),2000);toast("הקובץ ירד למחשב.")}
+$("#file-ged").addEventListener("change",async e=>{const f=e.target.files[0];e.target.value="";if(!f)return;const txt=await f.text();let data;
+  try{if(/\.json$/i.test(f.name)){const j=JSON.parse(txt);data={people:j.people,families:j.families,research:j.research||{},meta:j.meta||{}}}else data=parseGED(txt)}catch(err){toast("לא הצלחתי לקרוא את הקובץ: "+err.message,true);return}
+  const n=Object.keys(data.people||{}).length;if(!n){toast("לא נמצאו אנשים בקובץ.",true);return}
+  const existing=Object.keys(S.people).length;
+  const go=async()=>{closeDialog();await importAll(data)};
+  if(existing){const inp=el("input",{id:"cf",placeholder:"להחלפה הקלד/י: החלף"});openDialog(el("h2",{text:"להחליף את כל העץ?"}),el("p",{text:`בקובץ ${n} אנשים. העץ הנוכחי (${existing} אנשים) יימחק ויוחלף. (התמונות והמסמכים נשארים ב-Drive.)`}),inp,el("div",{class:"foot"},el("button",{class:"btn danger",onclick:()=>{if(inp.value.trim()==="החלף")go();else toast("צריך להקליד: החלף",true)}},"החלפה"),el("button",{class:"btn",onclick:closeDialog},"ביטול")))}
+  else go()});
+async function importAll(data){const strip=o=>{const x={...o};delete x.id;delete x.famc;delete x.fams;return x};const now=Date.now();
+  for(const id of Object.keys(S.people))if(!data.people[id])G.deleted.people[id]=now;for(const id of Object.keys(S.fams))if(!(data.families||{})[id])G.deleted.families[id]=now;
+  S.people={};for(const[k,p]of Object.entries(data.people))S.people[k]={...blank(),...strip(p),id:k,updatedAt:now};
+  S.fams={};for(const[k,f]of Object.entries(data.families||{}))S.fams[k]={...strip(f),id:k,updatedAt:now};
+  for(const[k,r]of Object.entries(data.research||{}))S.research[k]={...strip(r),id:k,updatedAt:now};
+  for(const c of["people","families","research"])for(const k of Object.keys(c==="people"?S.people:c==="families"?S.fams:S.research))delete G.deleted[c][k];
+  if(data.meta&&Object.keys(data.meta).length)S.meta={...data.meta,updatedAt:now};
+  if(data.meta?.focusDefault)S.focus=data.meta.focusDefault;
+  dirty=true;clearTimeout(saveT);setSaveState("שומר…");saveChain=saveChain.then(doSave,doSave);await saveChain;afterData();toast("הייבוא הושלם ונשמר ב-Drive.")}
+
+document.addEventListener("keydown",e=>{if(e.key==="/"&&document.activeElement.tagName!=="INPUT"&&document.activeElement.tagName!=="TEXTAREA"){e.preventDefault();$("#q").focus()}});
+let lastW=window.innerWidth,rzT=0;window.addEventListener("resize",()=>{if(Math.abs(window.innerWidth-lastW)<40)return;lastW=window.innerWidth;clearTimeout(rzT);rzT=setTimeout(()=>{if(S.view==="tree"&&S.focus){const svg=$("#inner svg.links");if(svg)drawLinks(svg,$("#inner"))}},250)});
+$("#btn-out").onclick=signOut;
+boot();
+</script>
+</body>
+</html>
