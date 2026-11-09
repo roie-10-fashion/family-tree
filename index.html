@@ -509,6 +509,7 @@ function renderTree(center){const inner=$("#inner");inner.innerHTML="";const F=S
     c.style.left=(X(it.x)-CW/2)+"px";c.style.top=Y(it.y)+"px";inner.append(c)}
   if(center)requestAnimationFrame(()=>centerOn(F))}
 function drawLinks(){}
+function box(e,inner){let x=0,y=0,n=e;while(n&&n!==inner){x+=n.offsetLeft;y+=n.offsetTop;n=n.offsetParent}return{x,y,w:e.offsetWidth,h:e.offsetHeight}}
 
 function applyT(){$("#inner").style.transform=`translate(${S.tx}px,${S.ty}px) scale(${S.sc})`}
 function centerOn(id){const inner=$("#inner"),cv=$("#canvas");const c=inner.querySelector(`.card[data-id="${CSS.escape(id)}"]`);if(!c)return;const b=box(c,inner);
