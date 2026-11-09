@@ -583,7 +583,7 @@ function renderTimeline(id){const p=P(id);const ev=[];
   spouseFams(id).forEach(f=>{const sp=spouseIn(f,id);
     push({t:f.divorced?"נישואין (התגרשו)":"נישואין",who:sp,date:f.marrDate,place:f.marrPlace,ord:1,after:f.children?.map(c=>dKey(P(c)?.birthDate)).filter(Boolean).sort()[0]});
     (f.children||[]).filter(P).forEach(c=>{const ch=P(c);push({t:gword(ch,"הולדת הבן","הולדת הבת","הולדת ילד/ה"),who:c,date:ch.birthDate,place:ch.birthPlace,ord:2})});
-    if(sp&&(P(sp).deathDate))push({t:gword(P(sp),"פטירת בן הזוג","פטירת בת הזוג","פטירת בן/בת הזוג"),who:sp,date:P(sp).deathDate,place:P(sp).deathPlace,ord:3})});
+    if(sp&&P(sp).deathDate&&(!p.deathDate||!dKey(p.deathDate)||dKey(P(sp).deathDate)<=dKey(p.deathDate)))push({t:gword(P(sp),"פטירת בן הזוג","פטירת בת הזוג","פטירת בן/בת הזוג"),who:sp,date:P(sp).deathDate,place:P(sp).deathPlace,ord:3})});
   parentsOf(id).forEach(x=>{const q=P(x);if(q.deathDate&&(!p.deathDate||dKey(q.deathDate)<=dKey(p.deathDate)))push({t:gword(q,"פטירת האב","פטירת האם","פטירת הורה"),who:x,date:q.deathDate,place:q.deathPlace,ord:3})});
   if(p.deceased||p.deathDate)push({t:p.holocaust?gword(p,"נספה בשואה","נספתה בשואה","נספה/תה בשואה"):"פטירה",date:p.deathDate,place:p.deathPlace,ord:8});
   if(p.burialPlace)push({t:"קבורה",date:"",place:p.burialPlace,ord:9});
