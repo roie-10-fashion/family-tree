@@ -174,6 +174,7 @@ dialog::backdrop{background:rgba(10,20,20,.45)}
 .form label{display:flex;flex-direction:column;gap:3px;font-size:13px;color:var(--muted)}
 .form input,.form select,.form textarea{padding:7px 9px;border:1px solid var(--line);border-radius:7px;background:var(--bg);color:var(--ink)}
 .form textarea{min-height:90px;resize:vertical}
+.datebox{position:relative;display:flex;gap:6px;align-items:stretch}.datebox input:not(.cal-hidden){flex:1;min-width:0}.cal-btn{border:1px solid var(--line);background:var(--surface);border-radius:7px;padding:0 10px;font-size:17px;line-height:1}.cal-btn:hover{border-color:var(--accent)}.cal-hidden{position:absolute;inset-inline-end:0;bottom:0;width:40px;height:100%;opacity:0;pointer-events:none;border:0;padding:0}
 .form .check{flex-direction:row;align-items:center;gap:8px;color:var(--ink)}
 .dlg .foot{display:flex;gap:8px;justify-content:flex-start;flex-wrap:wrap}
 .picker{position:relative}
@@ -576,7 +577,15 @@ function openDocEdit(id,i){const p=P(id);const d=(p.docs||[])[i];if(!d)return;
 /* ---------- dialogs ---------- */
 function openDialog(...kids){const b=$("#dlgbody");b.innerHTML="";kids.forEach(k=>k&&b.append(k));const d=$("#dlg");if(!d.open)d.showModal()}
 function closeDialog(){const d=$("#dlg");if(d.open)d.close()}
-function field(label,id,val,attrs={}){return el("label",{class:attrs.full?"full":""},label,attrs.textarea?el("textarea",{id,...attrs.extra},val||""):attrs.select?(()=>{const s=el("select",{id});attrs.select.forEach(([v,t])=>s.append(el("option",{value:v,selected:v===val},t)));return s})():el("input",{id,value:val||"",...attrs.extra}))}
+function field(label,id,val,attrs={}){return el("label",{class:attrs.full?"full":""},label,attrs.textarea?el("textarea",{id,...attrs.extra},val||""):attrs.select?(()=>{const s=el("select",{id});attrs.select.forEach(([v,t])=>s.append(el("option",{value:v,selected:v===val},t)));return s})():(attrs.extra===DATE_PH?dateBox(id,val):el("input",{id,value:val||"",...attrs.extra})))}
+/* date field: free text + calendar popup */
+function dateBox(id,val){const txt=el("input",{id,value:val||"",...DATE_PH});const cal=el("input",{type:"date",class:"cal-hidden",tabindex:"-1","aria-hidden":"true"});
+  const btn=el("button",{type:"button",class:"cal-btn",title:"בחירה מלוח שנה","aria-label":"בחירה מלוח שנה"},"📅");
+  btn.addEventListener("click",e=>{e.preventDefault();const g=inputToDate(txt.value).match(/^(\d{1,2}) ([A-Z]{3}) (\d{4})$/);
+    cal.value=g?`${g[3]}-${String(MNUM[g[2]]).padStart(2,"0")}-${g[1].padStart(2,"0")}`:"";
+    try{cal.showPicker()}catch(err){cal.style.pointerEvents="auto";cal.focus();cal.click()}});
+  cal.addEventListener("change",()=>{const m=cal.value.match(/^(\d{4})-(\d{2})-(\d{2})$/);if(m)txt.value=`${+m[3]}/${+m[2]}/${m[1]}`;txt.dispatchEvent(new Event("input"))});
+  return el("span",{class:"datebox"},txt,btn,cal)}
 function personForm(p){return el("div",{class:"form"},
   ...(()=>{const n=names(p);return[field("שם פרטי (עברית)","f-given",n.gH),field("שם משפחה (עברית)","f-surname",n.sH),field("First name (English)","f-given-en",n.gE,{extra:{dir:"ltr"}}),field("Last name (English)","f-surname-en",n.sE,{extra:{dir:"ltr"}})]})(),
   field("שם לאחר נישואין / שם נוסף","f-married",p.marriedName),field("מין","f-sex",p.sex||"U",{select:[["M","זכר"],["F","נקבה"],["U","לא ידוע"]]}),
