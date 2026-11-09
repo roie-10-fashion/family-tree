@@ -115,6 +115,7 @@ h1,h2,h3{font-family:var(--font-display);text-wrap:balance;margin:0}
 .zoom{position:absolute;bottom:14px;inset-inline-end:14px;display:flex;flex-direction:column;gap:6px;z-index:5}
 .zoom button{width:36px;height:36px;border-radius:8px;border:1px solid var(--line);background:var(--surface);font-weight:700;font-size:18px;box-shadow:var(--shadow)}
 .chartopts{position:absolute;top:12px;inset-inline-end:14px;z-index:5;display:flex;gap:8px;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:6px 10px;font-size:13px;box-shadow:var(--shadow)}
+.chartnav{position:absolute;top:12px;inset-inline-start:14px;z-index:5;display:flex;gap:6px}.chartnav .btn{box-shadow:var(--shadow)}.chartnav .btn:disabled{opacity:.45;cursor:default}
 .chartopts label{display:flex;gap:4px;align-items:center}
 
 /* profile */
@@ -226,6 +227,11 @@ dialog::backdrop{background:rgba(10,20,20,.45)}
     <div class="canvas" id="canvas">
       <div class="inner" id="inner"></div>
     </div>
+    <div class="chartnav">
+      <button class="btn small" id="nav-back" disabled title="חזרה לאדם הקודם">→ חזרה</button>
+      <button class="btn small" id="nav-fwd" disabled title="קדימה">קדימה ←</button>
+      <button class="btn small" id="nav-home" title="חזרה אליי">🏠 אני</button>
+    </div>
     <div class="chartopts">
       <label><input type="checkbox" id="opt-sibs" checked> אחים</label>
       <label><input type="checkbox" id="opt-gk"> נכדים</label>
@@ -234,7 +240,7 @@ dialog::backdrop{background:rgba(10,20,20,.45)}
     <div class="zoom">
       <button id="z-in" aria-label="הגדל">+</button>
       <button id="z-out" aria-label="הקטן">−</button>
-      <button id="z-fit" aria-label="מרכז" style="font-size:14px">⌖</button>
+      <button id="z-fit" aria-label="להציג את כל העץ" title="להציג את כל העץ" style="font-size:14px">⌖</button>
     </div>
     <div class="loading" id="loading">טוען את העץ…</div>
   </section>
@@ -268,8 +274,13 @@ function fmtDate(d){if(!d)return"";let s=String(d).trim();
   if((m=s.match(/^(TO|FROM) (.+)$/)))return tr(m[2]);
   return tr(s)}
 const yearOf=d=>{const m=String(d||"").match(/(\d{4})/);return m?+m[1]:null};
-function fullName(p){if(!p)return"?";const n=[p.given,p.surname].filter(Boolean).join(" ").trim();return n||"ללא שם"}
-function shortName(p){if(!p)return"?";const g=(p.given||"").split(/\s+/)[0]||"";const s=(p.surname||"").split(/\s+/)[0]||"";return (g+" "+s).trim()||"ללא שם"}
+const hasHe=s=>/[֐-׿]/.test(s),hasLat=s=>/[A-Za-z]/.test(s);
+function splitScript(s){const he=[],en=[];String(s||"").split(/\s+/).filter(Boolean).forEach(w=>{if(hasHe(w))he.push(w);else if(hasLat(w))en.push(w);else(he.length||!en.length?he:en).push(w)});return{he:he.join(" "),en:en.join(" ")}}
+function names(p){if(!p)return{gH:"",sH:"",gE:"",sE:""};if("givenEn" in p||"surnameEn" in p)return{gH:p.given||"",sH:p.surname||"",gE:p.givenEn||"",sE:p.surnameEn||""};const a=splitScript(p.given),b=splitScript(p.surname);return{gH:a.he,sH:b.he,gE:a.en,sE:b.en}}
+function enName(p){const n=names(p);return[n.gE,n.sE].filter(Boolean).join(" ")}
+function fullName(p){if(!p)return"?";const n=names(p);const s=[n.gH||n.gE,n.sH||n.sE].filter(Boolean).join(" ").trim();return s||"ללא שם"}
+function altName(p){const n=names(p);const e=enName(p);return e&&(n.gH||n.sH)?e:""}
+function shortName(p){if(!p)return"?";const n=names(p);const g=(n.gH||n.gE).split(/\s+/)[0]||"";const s=(n.sH||n.sE).split(/\s+/)[0]||"";return (g+" "+s).trim()||"ללא שם"}
 function lifespan(p){const b=yearOf(p.birthDate),d=yearOf(p.deathDate);if(b&&d)return`${b}–${d}`;if(b)return p.deceased?`${b}–?`:`נ. ${b}`;if(d)return`נפ׳ ${d}`;return p.deceased?"נפטר/ה":""}
 function initials(p){const n=fullName(p).replace(/[()"'?]/g,"").trim().split(/\s+/);return((n[0]||"")[0]||"?")+((n[1]||"")[0]||"")}
 const norm=s=>String(s||"").toLowerCase().replace(/[֑-ׇ]/g,"").replace(/[׳'"״().,\-]/g," ").replace(/\s+/g," ").trim();
@@ -385,6 +396,7 @@ function card(id,opts={}){
   const c=el("div",{class:`card ${p.sex||""} ${opts.focus?"focus":""} ${opts.small?"small":""} ${p.uncertain?"uncertain":""}`,"data-id":id,tabindex:"0",role:"button","aria-label":fullName(p)});
   c.append(avatar(p));
   const t=el("div",{},el("div",{class:"nm",text:fullName(p)}));
+  {const an=altName(p);if(an)t.append(el("div",{class:"mn",dir:"ltr",style:"text-align:end",text:an}))}
   if(p.marriedName)t.append(el("div",{class:"mn",text:"(לאחר נישואין: "+p.marriedName+")"}));
   const ls=lifespan(p);if(ls)t.append(el("div",{class:"yr",text:ls}));
   if(!opts.small&&p.birthPlace)t.append(el("div",{class:"mn",text:p.birthPlace}));
@@ -450,8 +462,10 @@ function drawLinks(svg,inner){svg.innerHTML="";svg.setAttribute("width",inner.sc
       const grp=inner.querySelector(`.group[data-fam="${CSS.escape(f.id)}"]`);if(grp){const kids=[...grp.querySelectorAll(".kids > .card")];if(kids.length){const kb=kids.map(k=>box(k,inner));const sx=(x1+x2)/2;const top=Math.min(...kb.map(b=>b.y));const midY=y+(top-y)*0.62;let d=`M${sx},${y} V${midY} `;const xs=kb.map(b=>b.x+b.w/2);d+=`M${Math.min(sx,...xs)},${midY} H${Math.max(sx,...xs)} `;kb.forEach(b=>d+=`M${b.x+b.w/2},${midY} V${b.y} `);const p2=document.createElementNS("http://www.w3.org/2000/svg","path");p2.setAttribute("d",d);svg.append(p2)}}})}}
 function applyT(){$("#inner").style.transform=`translate(${S.tx}px,${S.ty}px) scale(${S.sc})`}
 function centerOn(id){const inner=$("#inner"),cv=$("#canvas");const c=inner.querySelector(`.card[data-id="${CSS.escape(id)}"]`);if(!c)return;const b=box(c,inner);
-  const fitW=cv.clientWidth/(inner.scrollWidth+40);S.sc=Math.max(.45,Math.min(1,fitW<1?Math.max(fitW,.6):1));
-  S.tx=cv.clientWidth/2-(b.x+b.w/2)*S.sc;S.ty=cv.clientHeight*0.45-(b.y+b.h/2)*S.sc;applyT()}
+  const W=inner.scrollWidth,H=inner.scrollHeight,cw=cv.clientWidth,ch=cv.clientHeight-50;
+  S.sc=Math.max(.3,Math.min(1,cw/W,ch/H));
+  S.tx=W*S.sc<=cw?(cw-W*S.sc)/2:Math.min(0,Math.max(cw-W*S.sc,cw/2-(b.x+b.w/2)*S.sc));
+  S.ty=H*S.sc<=ch?50+(ch-H*S.sc)/2:50+Math.min(0,Math.max(ch-H*S.sc,ch/2-(b.y+b.h/2)*S.sc));applyT()}
 (function panzoom(){const cv=$("#canvas");let drag=null;
   cv.addEventListener("pointerdown",e=>{if(e.target.closest(".card"))return;drag={x:e.clientX,y:e.clientY,tx:S.tx,ty:S.ty};cv.setPointerCapture(e.pointerId);cv.classList.add("dragging")});
   cv.addEventListener("pointermove",e=>{if(!drag)return;S.tx=drag.tx+e.clientX-drag.x;S.ty=drag.ty+e.clientY-drag.y;applyT()});
@@ -460,7 +474,12 @@ function centerOn(id){const inner=$("#inner"),cv=$("#canvas");const c=inner.quer
   $("#z-in").onclick=()=>zoomAt(cv.clientWidth/2,cv.clientHeight/2,1.2);$("#z-out").onclick=()=>zoomAt(cv.clientWidth/2,cv.clientHeight/2,1/1.2);$("#z-fit").onclick=()=>centerOn(S.focus);})();
 function zoomAt(x,y,k){const ns=Math.max(.25,Math.min(2.2,S.sc*k));S.tx=x-(x-S.tx)*(ns/S.sc);S.ty=y-(y-S.ty)*(ns/S.sc);S.sc=ns;applyT()}
 ["opt-sibs","opt-gk","opt-gen3"].forEach(i=>$("#"+i).addEventListener("change",()=>renderTree(true)));
-function setFocus(id){if(!P(id))return;S.focus=id;try{history.replaceState(null,"","#"+id)}catch(e){location.hash=id}
+const NAV={back:[],fwd:[]};
+function updNav(){const b=$("#nav-back"),f=$("#nav-fwd");if(b)b.disabled=!NAV.back.length;if(f)f.disabled=!NAV.fwd.length}
+function goBack(){const id=NAV.back.pop();if(!id)return;NAV.fwd.push(S.focus);setFocus(id,true)}
+function goFwd(){const id=NAV.fwd.pop();if(!id)return;NAV.back.push(S.focus);setFocus(id,true)}
+function goHome(){const r=(S.meta.rootPerson&&P(S.meta.rootPerson))?S.meta.rootPerson:S.meta.focusDefault;if(r)setFocus(r)}
+function setFocus(id,nav){if(!P(id))return;if(!nav&&S.focus&&S.focus!==id){NAV.back.push(S.focus);NAV.fwd=[]}updNav();S.focus=id;try{history.replaceState(null,"","#"+id)}catch(e){location.hash=id}
   if(S.view!=="tree")renderPanel();else renderAll(true)}
 function restoreHash(){const h=(location.hash||"").slice(1);if(/^[A-Za-z0-9]+$/.test(h))S.focus=h}
 window.addEventListener("hashchange",()=>{const h=location.hash.slice(1);if(h&&P(h)&&h!==S.focus){S.focus=h;renderAll(true)}});
@@ -470,7 +489,7 @@ function chip(id,label){const p=P(id);return el("button",{class:"chip",onclick:(
 function renderPanel(){
   const pn=$("#panel");pn.innerHTML="";const id=S.focus;const p=P(id);
   if(!p){pn.append(el("p",{class:"hint",text:"בחר/י אדם מהעץ או מהחיפוש כדי לראות את הפרטים שלו."}));return}
-  const head=el("div",{class:"prof-head"},avatar(p),el("div",{},el("h2",{text:fullName(p)}),el("div",{class:"sub",text:[lifespan(p),p.marriedName?"לאחר נישואין: "+p.marriedName:"",p.suffix].filter(Boolean).join(" · ")}),p.uncertain?el("span",{class:"pill",text:"קשר משוער – דורש אימות"}):null));
+  const head=el("div",{class:"prof-head"},avatar(p),el("div",{},el("h2",{text:fullName(p)}),altName(p)?el("div",{class:"sub",dir:"ltr",style:"text-align:end",text:altName(p)}):null,el("div",{class:"sub",text:[lifespan(p),p.marriedName?"לאחר נישואין: "+p.marriedName:"",p.suffix].filter(Boolean).join(" · ")}),p.uncertain?el("span",{class:"pill",text:"קשר משוער – דורש אימות"}):null));
   pn.append(head);
   if(S.canWrite)pn.append(el("div",{class:"actions"},el("button",{class:"btn small primary",onclick:()=>openEdit(id)},"עריכת פרטים"),el("button",{class:"btn small",onclick:()=>$("#file-photo").click()},"הוספת תמונה"),el("button",{class:"btn small",onclick:()=>openDocUpload(id)},"הוספת מסמך"),el("button",{class:"btn small",onclick:()=>openRel(id)},"מה הקשר אליו?")));
   else pn.append(el("div",{class:"actions"},el("button",{class:"btn small",onclick:()=>openRel(id)},"מה הקשר אליו?")));
@@ -547,7 +566,7 @@ function openDialog(...kids){const b=$("#dlgbody");b.innerHTML="";kids.forEach(k
 function closeDialog(){const d=$("#dlg");if(d.open)d.close()}
 function field(label,id,val,attrs={}){return el("label",{class:attrs.full?"full":""},label,attrs.textarea?el("textarea",{id,...attrs.extra},val||""):attrs.select?(()=>{const s=el("select",{id});attrs.select.forEach(([v,t])=>s.append(el("option",{value:v,selected:v===val},t)));return s})():el("input",{id,value:val||"",...attrs.extra}))}
 function personForm(p){return el("div",{class:"form"},
-  field("שם פרטי","f-given",p.given),field("שם משפחה","f-surname",p.surname),
+  ...(()=>{const n=names(p);return[field("שם פרטי (עברית)","f-given",n.gH),field("שם משפחה (עברית)","f-surname",n.sH),field("First name (English)","f-given-en",n.gE,{extra:{dir:"ltr"}}),field("Last name (English)","f-surname-en",n.sE,{extra:{dir:"ltr"}})]})(),
   field("שם לאחר נישואין / שם נוסף","f-married",p.marriedName),field("מין","f-sex",p.sex||"U",{select:[["M","זכר"],["F","נקבה"],["U","לא ידוע"]]}),
   field("תאריך לידה","f-bdate",p.birthDate,{extra:{placeholder:"למשל 27 JUL 1932 או 1932"}}),field("מקום לידה","f-bplace",p.birthPlace),
   el("label",{class:"check full"},el("input",{type:"checkbox",id:"f-dec",checked:!!p.deceased}),"נפטר/ה"),
@@ -556,10 +575,10 @@ function personForm(p){return el("div",{class:"form"},
   field("מגורים","f-res",p.residence,{full:true}),
   field("הערות וסיפורים","f-notes",p.notes,{full:true,textarea:true}),
   el("label",{class:"check full"},el("input",{type:"checkbox",id:"f-unc",checked:!!p.uncertain}),"הקשר של האדם הזה משוער ודורש אימות"))}
-function readForm(p){const g=i=>($("#"+i)?.value||"").trim();return{...p,given:g("f-given"),surname:g("f-surname"),marriedName:g("f-married"),sex:g("f-sex")||"U",birthDate:g("f-bdate"),birthPlace:g("f-bplace"),deceased:$("#f-dec").checked||!!g("f-ddate"),deathDate:g("f-ddate"),deathPlace:g("f-dplace"),burialPlace:g("f-burial"),occupation:g("f-occ"),residence:g("f-res"),notes:$("#f-notes").value,uncertain:$("#f-unc").checked}}
+function readForm(p){const g=i=>($("#"+i)?.value||"").trim();return{...p,given:g("f-given"),surname:g("f-surname"),givenEn:g("f-given-en"),surnameEn:g("f-surname-en"),marriedName:g("f-married"),sex:g("f-sex")||"U",birthDate:g("f-bdate"),birthPlace:g("f-bplace"),deceased:$("#f-dec").checked||!!g("f-ddate"),deathDate:g("f-ddate"),deathPlace:g("f-dplace"),burialPlace:g("f-burial"),occupation:g("f-occ"),residence:g("f-res"),notes:$("#f-notes").value,uncertain:$("#f-unc").checked}}
 const blank=()=>({given:"",surname:"",marriedName:"",suffix:"",sex:"U",birthDate:"",birthPlace:"",deceased:false,deathDate:"",deathPlace:"",burialPlace:"",occupation:"",residence:"",notes:"",sources:[],remotePhotos:[],photos:[],docs:[],uncertain:false});
 function openEdit(id){const p=P(id);openDialog(el("h2",{text:"עריכת "+fullName(p)}),personForm(p),el("div",{class:"foot"},
-  el("button",{class:"btn primary",onclick:async()=>{const np=readForm(p);if(!np.given&&!np.surname){toast("צריך לפחות שם פרטי או שם משפחה.",true);return}closeDialog();if(await savePerson(np))toast("נשמר.")}},"שמירה"),el("button",{class:"btn",onclick:closeDialog},"ביטול")))}
+  el("button",{class:"btn primary",onclick:async()=>{const np=readForm(p);if(!np.given&&!np.surname&&!np.givenEn&&!np.surnameEn){toast("צריך לפחות שם פרטי או שם משפחה.",true);return}closeDialog();if(await savePerson(np))toast("נשמר.")}},"שמירה"),el("button",{class:"btn",onclick:closeDialog},"ביטול")))}
 
 /* person picker */
 function picker(id,ph,onPick,initial){const wrap=el("div",{class:"picker"});const inp=el("input",{id,type:"search",placeholder:ph,autocomplete:"off",value:initial?fullName(P(initial)):""});const res=el("div",{class:"results"});wrap.append(inp,res);wrap.dataset.value=initial||"";
@@ -575,7 +594,7 @@ function openAddRelative(id,role,famId){if(!S.canWrite)return;const p=P(id);let 
   const tabs=el("div",{class:"tabs"},el("button",{type:"button","aria-pressed":"true",onclick:e=>{mode="new";tabs.children[0].setAttribute("aria-pressed","true");tabs.children[1].setAttribute("aria-pressed","false");formBox.style.display="";pickBox.style.display="none"}},"אדם חדש"),el("button",{type:"button","aria-pressed":"false",onclick:()=>{mode="exist";tabs.children[1].setAttribute("aria-pressed","true");tabs.children[0].setAttribute("aria-pressed","false");formBox.style.display="none";pickBox.style.display=""}},"אדם קיים בעץ"));
   openDialog(el("h2",{text:`הוספת ${ROLE_LABEL[role]} ל${fullName(p)}`}),tabs,famSel?el("label",{class:"hint"},"עם איזה בן/בת זוג? ",famSel):null,formBox,pickBox,el("div",{class:"foot"},
     el("button",{class:"btn primary",onclick:async()=>{let rid;
-      if(mode==="new"){const n=readForm({...np,id:uid("P")});if(!n.given&&!n.surname){toast("צריך לפחות שם פרטי או שם משפחה.",true);return}closeDialog();if(!await savePerson(n))return;rid=n.id}
+      if(mode==="new"){const n=readForm({...np,id:uid("P")});if(!n.given&&!n.surname&&!n.givenEn&&!n.surnameEn){toast("צריך לפחות שם פרטי או שם משפחה.",true);return}closeDialog();if(!await savePerson(n))return;rid=n.id}
       else{rid=pick.dataset.value;if(!rid||rid===id){toast("בחר/י אדם מהרשימה.",true);return}closeDialog()}
       await linkRelative(id,role,rid,famSel?famSel.value:famId);toast("נוסף לעץ.")}},"הוספה"),el("button",{class:"btn",onclick:closeDialog},"ביטול")))}
 async function linkRelative(id,role,rid,famId){const p=P(id),r=P(rid);
@@ -598,11 +617,11 @@ function confirmDelete(id){const p=P(id);openDialog(el("h2",{text:"למחוק א
   el("button",{class:"btn danger",onclick:async()=>{closeDialog();for(const fid of[...(S.famc[id]||[]),...(S.fams_[id]||[])]){const f=S.fams[fid];if(!f)continue;const nf={...f,husb:f.husb===id?"":f.husb,wife:f.wife===id?"":f.wife,children:(f.children||[]).filter(x=>x!==id)};const members=[nf.husb,nf.wife,...nf.children].filter(Boolean);if(members.length<2)await delDoc("families",fid);else await saveFam(nf)}
     const nb=parentsOf(id)[0]||childrenOf(id)[0]||siblingsOf(id)[0];await delDoc("people",id);S.focus=nb||Object.keys(S.people)[0]||null;renderAll(true);toast("נמחק.")}},"מחיקה"),el("button",{class:"btn",onclick:closeDialog},"ביטול")))}
 $("#btn-add").onclick=()=>{const np=blank();openDialog(el("h2",{text:"הוספת אדם חדש"}),el("p",{class:"hint",text:"אדם שמוסיפים כך לא מחובר לאף אחד. אחרי השמירה אפשר לחבר אותו דרך ״הוספת קרוב משפחה״ בכרטיס של אדם אחר, בלשונית ״אדם קיים בעץ״."}),personForm(np),el("div",{class:"foot"},
-  el("button",{class:"btn primary",onclick:async()=>{const n=readForm({...np,id:uid("P")});if(!n.given&&!n.surname){toast("צריך לפחות שם פרטי או שם משפחה.",true);return}closeDialog();if(await savePerson(n)){setFocus(n.id);toast("נוסף.")}}},"שמירה"),el("button",{class:"btn",onclick:closeDialog},"ביטול")))};
+  el("button",{class:"btn primary",onclick:async()=>{const n=readForm({...np,id:uid("P")});if(!n.given&&!n.surname&&!n.givenEn&&!n.surnameEn){toast("צריך לפחות שם פרטי או שם משפחה.",true);return}closeDialog();if(await savePerson(n)){setFocus(n.id);toast("נוסף.")}}},"שמירה"),el("button",{class:"btn",onclick:closeDialog},"ביטול")))};
 
 /* ---------- search ---------- */
 function searchPeople(q,limit=20){const n=norm(q);if(!n)return[];const terms=n.split(" ");const out=[];
-  for(const p of Object.values(S.people)){const hay=norm([p.given,p.surname,p.marriedName,p.suffix,p.birthPlace].join(" "));if(terms.every(t=>hay.includes(t))){const nm=norm(fullName(p));out.push([p.id,nm.startsWith(terms[0])?0:1])}}
+  for(const p of Object.values(S.people)){const hay=norm([p.given,p.surname,p.givenEn,p.surnameEn,p.marriedName,p.suffix,p.birthPlace].join(" "));if(terms.every(t=>hay.includes(t))){const nm=norm(fullName(p));out.push([p.id,nm.startsWith(terms[0])?0:1])}}
   return out.sort((a,b)=>a[1]-b[1]||fullName(P(a[0])).localeCompare(fullName(P(b[0])),"he")).slice(0,limit).map(x=>x[0])}
 (function(){const q=$("#q"),r=$("#qres");let act=-1;
   const draw=()=>{const ids=searchPeople(q.value);r.innerHTML="";act=-1;ids.forEach(id=>r.append(el("button",{onclick:()=>{pick(id)}},el("span",{text:fullName(P(id))}),el("small",{text:[lifespan(P(id)),P(id).birthPlace].filter(Boolean).join(" · ")}))));if(!ids.length&&q.value.trim())r.append(el("div",{class:"hint",style:"padding:8px 12px",text:"לא נמצא אדם בשם הזה."}));r.classList.toggle("open",!!q.value.trim())};
@@ -686,7 +705,7 @@ function parseGED(text){const lines=text.replace(/^﻿/,"").split(/\r?\n/);const
   return{people,families:fams}}
 function toGED(){const L=["0 HEAD","1 SOUR COHEN_TREE","2 NAME Cohen family tree page","1 GEDC","2 VERS 5.5.1","2 FORM LINEAGE-LINKED","1 CHAR UTF-8","1 DATE "+new Date().toUTCString().slice(5,16).toUpperCase()];
   const esc=s=>String(s||"").replace(/\r?\n/g," ");const put=(lv,tag,val)=>{if(val==null||val==="")return;const lines=String(val).split(/\r?\n/);L.push(`${lv} ${tag} ${lines[0]}`);lines.slice(1).forEach(x=>L.push(`${lv+1} CONT ${x}`))};
-  for(const p of Object.values(S.people)){L.push(`0 @${p.id}@ INDI`);L.push(`1 NAME ${esc(p.given)} /${esc(p.surname)}/`);put(2,"GIVN",esc(p.given));put(2,"SURN",esc(p.surname));put(2,"_MARNM",esc(p.marriedName));put(2,"NSFX",esc(p.suffix));L.push(`1 SEX ${p.sex||"U"}`);
+  for(const p of Object.values(S.people)){L.push(`0 @${p.id}@ INDI`);{const n=names(p);const gp=n.gH||n.gE,sp=n.sH||n.sE;L.push(`1 NAME ${esc(gp)} /${esc(sp)}/`);put(2,"GIVN",esc(gp));put(2,"SURN",esc(sp));}put(2,"_MARNM",esc(p.marriedName));put(2,"NSFX",esc(p.suffix));{const n=names(p);if((n.gH||n.sH)&&(n.gE||n.sE)){L.push(`1 NAME ${esc(n.gE)} /${esc(n.sE)}/`);put(2,"TYPE","aka")}}L.push(`1 SEX ${p.sex||"U"}`);
     if(p.birthDate||p.birthPlace){L.push("1 BIRT");put(2,"DATE",p.birthDate);put(2,"PLAC",esc(p.birthPlace))}
     if(p.deceased||p.deathDate){L.push(p.deathDate||p.deathPlace?"1 DEAT":"1 DEAT Y");put(2,"DATE",p.deathDate);put(2,"PLAC",esc(p.deathPlace))}
     if(p.burialPlace){L.push("1 BURI");put(2,"PLAC",esc(p.burialPlace))}put(1,"OCCU",esc(p.occupation));if(p.residence){L.push("1 RESI");put(2,"ADDR",esc(p.residence))}put(1,"NOTE",p.notes);
@@ -721,7 +740,7 @@ async function importAll(data){const strip=o=>{const x={...o};delete x.id;delete
 
 document.addEventListener("keydown",e=>{if(e.key==="/"&&document.activeElement.tagName!=="INPUT"&&document.activeElement.tagName!=="TEXTAREA"){e.preventDefault();$("#q").focus()}});
 let lastW=window.innerWidth,rzT=0;window.addEventListener("resize",()=>{if(Math.abs(window.innerWidth-lastW)<40)return;lastW=window.innerWidth;clearTimeout(rzT);rzT=setTimeout(()=>{if(S.view==="tree"&&S.focus){const svg=$("#inner svg.links");if(svg)drawLinks(svg,$("#inner"))}},250)});
-$("#btn-out").onclick=signOut;
+$("#btn-out").onclick=signOut;$("#nav-back").onclick=goBack;$("#nav-fwd").onclick=goFwd;$("#nav-home").onclick=goHome;
 boot();
 </script>
 </body>
