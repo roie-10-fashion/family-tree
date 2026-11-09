@@ -143,6 +143,9 @@ h1,h2,h3{font-family:var(--font-display);text-wrap:balance;margin:0}
 .note{white-space:pre-wrap;background:var(--bg);border-radius:8px;padding:10px;font-size:14px}
 .pill{display:inline-block;font-size:11px;font-weight:700;padding:1px 8px;border-radius:999px;background:color-mix(in srgb,var(--warn) 20%,var(--surface));color:var(--warn)}
 .photos{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+.dropzone{border:1.5px dashed var(--line);border-radius:9px;padding:8px;text-align:center;font-size:13px;color:var(--muted)}
+#panel.drop-on{outline:3px dashed var(--accent);outline-offset:-6px;background:var(--accent-soft)}#panel.drop-on .dropzone{border-color:var(--accent);color:var(--accent)}
+.card.drop-on{outline:3px dashed var(--accent)!important;outline-offset:2px}
 .thumb{position:relative;padding:0;border:2px solid transparent;border-radius:9px;background:var(--bg);overflow:hidden;cursor:zoom-in;aspect-ratio:1;display:block;min-width:0}.thumb.primary{border-color:var(--accent)}.thumb img{width:100%;height:100%;object-fit:cover;display:block;border-radius:0}.thumb .badge{position:absolute;bottom:4px;inset-inline-start:4px;background:var(--accent);color:#fff;font-size:10px;font-weight:700;padding:1px 6px;border-radius:6px}
 dialog.wide{width:min(900px,96vw)}
 .photos figure{margin:0;position:relative}
@@ -549,7 +552,7 @@ function renderPanel(){
   if(!p){pn.append(el("p",{class:"hint",text:"בחר/י אדם מהעץ או מהחיפוש כדי לראות את הפרטים שלו."}));return}
   const head=el("div",{class:"prof-head"},avatar(p),el("div",{},el("h2",{text:fullName(p)}),altName(p)?el("div",{class:"sub",dir:"ltr",style:"text-align:end",text:altName(p)}):null,el("div",{class:"sub",text:[lifespan(p),p.marriedName?"לאחר נישואין: "+p.marriedName:"",p.suffix].filter(Boolean).join(" · ")}),p.uncertain?el("span",{class:"pill",text:"קשר משוער – דורש אימות"}):null));
   pn.append(head);
-  if(S.canWrite)pn.append(el("div",{class:"actions"},el("button",{class:"btn small primary",onclick:()=>openEdit(id)},"עריכת פרטים"),el("button",{class:"btn small",onclick:()=>$("#file-photo").click()},"הוספת תמונה"),el("button",{class:"btn small",onclick:()=>openDocUpload(id)},"הוספת מסמך"),el("button",{class:"btn small",onclick:()=>openRel(id)},"מה הקשר אליו?")));
+  if(S.canWrite)pn.append(el("div",{class:"dropzone",text:"אפשר לגרור לכאן תמונות וקבצים מהמחשב"}),el("div",{class:"actions"},el("button",{class:"btn small primary",onclick:()=>openEdit(id)},"עריכת פרטים"),el("button",{class:"btn small",onclick:()=>$("#file-photo").click()},"הוספת תמונה"),el("button",{class:"btn small",onclick:()=>openDocUpload(id)},"הוספת מסמך"),el("button",{class:"btn small",onclick:()=>openRel(id)},"מה הקשר אליו?")));
   else pn.append(el("div",{class:"actions"},el("button",{class:"btn small",onclick:()=>openRel(id)},"מה הקשר אליו?")));
   // facts
   const facts=el("dl",{class:"facts"});const add=(k,v)=>{if(v){facts.append(el("dt",{text:k}),el("dd",{text:v}))}};
@@ -607,13 +610,23 @@ function openGallery(pid,start){const p=P(pid);const list=(p.photos||[]).filter(
 function openLightbox(x,p){openDialog(el("div",{class:"lightbox"},driveImg(x.driveId,x.caption||"")),el("div",{class:"hint",text:x.caption||fullName(p)}),el("div",{class:"foot"},el("button",{class:"btn",onclick:closeDialog},"סגירה")))}
 
 /* ---------- photos ---------- */
-$("#file-photo").addEventListener("change",async e=>{const files=[...e.target.files];e.target.value="";const p=P(S.focus);if(!p||!files.length)return;
+$("#file-photo").addEventListener("change",e=>{const files=[...e.target.files];e.target.value="";uploadFiles(S.focus,files)});
+async function uploadFiles(pid,files){const p=P(pid);if(!p||!files.length||!S.canWrite)return;
   let folder;try{folder=await subFolder("תמונות")}catch(err){if(!(err instanceof NeedAuth))toast("לא הצלחתי לפתוח את תיקיית התמונות ב-Drive.",true);return}
   const ph=[...(p.photos||[])],dc=[...(p.docs||[])];let moved=0;
   for(const f of files){const isImg=/^image\//.test(f.type);try{toast("מעלה את "+f.name+"…");const fold=isImg?folder:await subFolder("מסמכים");const r=await driveUpload(f,fullName(p)+" - "+f.name,fold);
       if(isImg)ph.push({driveId:r.id,caption:f.name.replace(/\.[^.]+$/,""),mime:r.mimeType||f.type,primary:!ph.some(x=>x.primary)&&!ph.filter(isImgItem).length});
       else{dc.push({driveId:r.id,title:f.name.replace(/\.[^.]+$/,""),date:"",note:"",contentType:r.mimeType||f.type,added:new Date().toISOString().slice(0,10)});moved++}}catch(err){toast("ההעלאה נכשלה: "+(err.message||err),true)}}
-  await savePerson({...P(S.focus)||p,photos:ph,docs:dc});toast(moved?`נשמר ב-Drive. ${moved} קבצים שאינם תמונה נכנסו ל״מסמכים״.`:"התמונות נשמרו ב-Drive.")});
+  await savePerson({...P(pid)||p,photos:ph,docs:dc});toast(moved?`נשמר ב-Drive (${fullName(p)}). ${moved} קבצים שאינם תמונה נכנסו ל״מסמכים״.`:`התמונות נשמרו ב-Drive (${fullName(p)}).`)}
+/* drag & drop: onto the profile panel (current person) or onto any card in the tree */
+(function(){let depth=0;const hasFiles=e=>[...(e.dataTransfer?.types||[])].includes("Files");
+  const panel=$("#panel"),inner=$("#inner");
+  const targetOf=e=>{const c=e.target.closest&&e.target.closest(".card[data-id]");if(c)return{id:c.dataset.id,el:c};if(e.target.closest&&e.target.closest("#panel"))return{id:S.focus,el:panel};return null};
+  const clear=()=>document.querySelectorAll(".drop-on").forEach(x=>x.classList.remove("drop-on"));
+  document.addEventListener("dragover",e=>{if(!hasFiles(e))return;e.preventDefault();const t=targetOf(e);clear();if(t&&S.canWrite){t.el.classList.add("drop-on");e.dataTransfer.dropEffect="copy"}else e.dataTransfer.dropEffect="none"});
+  document.addEventListener("dragleave",e=>{if(!e.relatedTarget)clear()});
+  document.addEventListener("drop",e=>{if(!hasFiles(e))return;e.preventDefault();const t=targetOf(e);clear();if(!t||!S.canWrite){toast("גרור את הקבצים אל הכרטיס של האדם בצד, או אל הכרטיס שלו בעץ.",true);return}
+    const files=[...e.dataTransfer.files];if(files.length)uploadFiles(t.id,files)});})();
 async function setPrimaryPhoto(id,i){const p=P(id);const ph=(p.photos||[]).map((x,j)=>({...x,primary:j===i}));await savePerson({...p,photos:ph})}
 async function removePhoto(id,i){const p=P(id);const ph=[...(p.photos||[])];const [rm]=ph.splice(i,1);if(rm?.primary&&ph[0])ph[0]={...ph[0],primary:true};await savePerson({...p,photos:ph});if(rm?.driveId){try{await driveTrash(rm.driveId)}catch(e){}}}
 
