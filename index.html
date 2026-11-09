@@ -264,8 +264,20 @@ function toast(msg,warn){const b=$("#banner");b.textContent=msg;b.className="ban
 
 /* ---------- names & dates ---------- */
 const MONTHS={JAN:"ינו׳",FEB:"פבר׳",MAR:"מרץ",APR:"אפר׳",MAY:"מאי",JUN:"יוני",JUL:"יולי",AUG:"אוג׳",SEP:"ספט׳",OCT:"אוק׳",NOV:"נוב׳",DEC:"דצמ׳"};
+const MKEYS=["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"],MNUM=Object.fromEntries(MKEYS.map((k,i)=>[k,i+1]));
+/* form <-> stored (GEDCOM) dates: the person types 15/03/2026, 3/2026, 2026, "בערך 1930", "לפני 1940", "בין 1930 ל-1935" */
+function dateToInput(d){if(!d)return"";const one=x=>x.replace(/\b(\d{1,2}) ([A-Z]{3}) (\d{3,4})\b/g,(m,a,b,c)=>MNUM[b]?`${a}/${MNUM[b]}/${c}`:m).replace(/\b([A-Z]{3}) (\d{4})\b/g,(m,b,c)=>MNUM[b]?`${MNUM[b]}/${c}`:m);
+  let s=String(d).trim(),m;if((m=s.match(/^BET (.+) AND (.+)$/)))return`בין ${one(m[1])} ל-${one(m[2])}`;if((m=s.match(/^(ABT|EST|CAL) (.+)$/)))return"בערך "+one(m[2]);
+  if((m=s.match(/^BEF (.+)$/)))return"לפני "+one(m[1]);if((m=s.match(/^AFT (.+)$/)))return"אחרי "+one(m[1]);if((m=s.match(/^(?:FROM|TO) (.+)$/)))return one(m[1]);return one(s)}
+function inputToDate(v){let s=String(v||"").trim();if(!s)return"";const one=x=>{x=x.trim();let m;
+    if((m=x.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{4})$/))&&+m[2]>=1&&+m[2]<=12)return`${+m[1]} ${MKEYS[+m[2]-1]} ${m[3]}`;
+    if((m=x.match(/^(\d{1,2})[\/.\-](\d{4})$/))&&+m[1]>=1&&+m[1]<=12)return`${MKEYS[+m[1]-1]} ${m[2]}`;
+    return x.toUpperCase()===x?x:x};
+  let m;if((m=s.match(/^בין\s+(.+?)\s+(?:ל-?|עד\s+)(.+)$/)))return`BET ${one(m[1])} AND ${one(m[2])}`;if((m=s.match(/^(?:בערך|בסביבות|כ-)\s*(.+)$/)))return"ABT "+one(m[1]);
+  if((m=s.match(/^לפני\s+(.+)$/)))return"BEF "+one(m[1]);if((m=s.match(/^אחרי\s+(.+)$/)))return"AFT "+one(m[1]);return one(s)}
+const DATE_PH={placeholder:"למשל 15/03/2026, או רק שנה",dir:"ltr"};
 function fmtDate(d){if(!d)return"";let s=String(d).trim();
-  const tr=x=>x.replace(/\b(\d{1,2}) ([A-Z]{3}) (\d{3,4})\b/g,(m,a,b,c)=>`${a} ${MONTHS[b]||b} ${c}`).replace(/\b([A-Z]{3}) (\d{4})\b/g,(m,b,c)=>MONTHS[b]?`${MONTHS[b]} ${c}`:m);
+  const tr=x=>x.replace(/\b(\d{1,2}) ([A-Z]{3}) (\d{3,4})\b/g,(m,a,b,c)=>MNUM[b]?`${a}/${MNUM[b]}/${c}`:m).replace(/\b([A-Z]{3}) (\d{4})\b/g,(m,b,c)=>MONTHS[b]?`${MONTHS[b]} ${c}`:m);
   let m;
   if((m=s.match(/^BET (.+) AND (.+)$/)))return`בין ${tr(m[1])} ל-${tr(m[2])}`;
   if((m=s.match(/^(ABT|EST|CAL) (.+)$/)))return`בערך ${tr(m[2])}`;
@@ -548,16 +560,16 @@ function openDocUpload(id){const p=P(id);const extra=new Set();
   const chips=el("div",{class:"multi"});const drawChips=()=>{chips.innerHTML="";chips.append(el("span",{class:"chip"},shortName(p)));extra.forEach(x=>chips.append(el("span",{class:"chip"},shortName(P(x)),el("button",{type:"button",class:"btn small",onclick:()=>{extra.delete(x);drawChips()}},"×"))))};
   const pk=picker("doc-who","לחבר את המסמך גם לאדם נוסף…",v=>{if(v!==id)extra.add(v);pk.querySelector("input").value="";drawChips()});drawChips();
   openDialog(el("h2",{text:"הוספת מסמך ל"+fullName(p)}),el("p",{class:"hint",text:"PDF או תמונה של מסמך (סריקה/צילום), עד 20MB לקובץ. קובץ Word צריך לשמור קודם כ-PDF."}),
-    el("div",{class:"form"},el("label",{class:"full"},"קובץ",fin),field("כותרת (למשל: תעודת לידה)","doc-title","",{full:true}),field("תאריך המסמך","doc-date","",{extra:{placeholder:"למשל 1932 או 27 JUL 1932"}}),field("הערה","doc-note",""),
+    el("div",{class:"form"},el("label",{class:"full"},"קובץ",fin),field("כותרת (למשל: תעודת לידה)","doc-title","",{full:true}),field("תאריך המסמך","doc-date","",{extra:DATE_PH}),field("הערה","doc-note",""),
       el("label",{class:"full"},"מחובר ל:",chips,pk)),
     el("div",{class:"foot"},el("button",{class:"btn primary",id:"doc-go",onclick:async()=>{const files=[...fin.files];if(!files.length){toast("בחר/י קובץ.",true);return}
-      const title=$("#doc-title").value.trim(),date=$("#doc-date").value.trim(),note=$("#doc-note").value.trim();$("#doc-go").disabled=true;
+      const title=$("#doc-title").value.trim(),date=inputToDate($("#doc-date").value),note=$("#doc-note").value.trim();$("#doc-go").disabled=true;
       let folder;try{folder=await subFolder("מסמכים")}catch(err){$("#doc-go").disabled=false;if(!(err instanceof NeedAuth))toast("לא הצלחתי לפתוח את תיקיית המסמכים ב-Drive.",true);return}
       const added=[];for(const f of files){try{toast("מעלה את "+f.name+"…");const r=await driveUpload(f,fullName(p)+" - "+(title||f.name.replace(/\.[^.]+$/,""))+(f.name.match(/\.[a-z0-9]+$/i)||[""])[0],folder);added.push({driveId:r.id,title:files.length>1||!title?(title?title+" – ":"")+f.name.replace(/\.[^.]+$/,""):title,date,note,contentType:r.mimeType||f.type,added:new Date().toISOString().slice(0,10)})}catch(err){toast("ההעלאה של "+f.name+" נכשלה: "+(err.message||err),true)}}
       closeDialog();if(!added.length)return;for(const pid of [id,...extra]){const q=P(pid);if(q)await savePerson({...q,docs:[...(q.docs||[]),...added]})}toast(added.length>1?`${added.length} מסמכים נשמרו.`:"המסמך נשמר.")}},"העלאה"),el("button",{class:"btn",onclick:closeDialog},"ביטול")))}
 function openDocEdit(id,i){const p=P(id);const d=(p.docs||[])[i];if(!d)return;
-  openDialog(el("h2",{text:"עריכת מסמך"}),el("div",{class:"form"},field("כותרת","de-title",d.title,{full:true}),field("תאריך","de-date",d.date),field("הערה","de-note",d.note)),
-    el("div",{class:"foot"},el("button",{class:"btn primary",onclick:async()=>{const docs=[...p.docs];docs[i]={...d,title:$("#de-title").value.trim(),date:$("#de-date").value.trim(),note:$("#de-note").value.trim()};closeDialog();await savePerson({...p,docs});toast("נשמר.")}},"שמירה"),
+  openDialog(el("h2",{text:"עריכת מסמך"}),el("div",{class:"form"},field("כותרת","de-title",d.title,{full:true}),field("תאריך","de-date",dateToInput(d.date),{extra:DATE_PH}),field("הערה","de-note",d.note)),
+    el("div",{class:"foot"},el("button",{class:"btn primary",onclick:async()=>{const docs=[...p.docs];docs[i]={...d,title:$("#de-title").value.trim(),date:inputToDate($("#de-date").value),note:$("#de-note").value.trim()};closeDialog();await savePerson({...p,docs});toast("נשמר.")}},"שמירה"),
       el("button",{class:"btn danger",onclick:async()=>{const docs=[...p.docs];docs.splice(i,1);closeDialog();await savePerson({...p,docs});toast("המסמך הוסר מהכרטיס של "+shortName(p)+".")}},"הסרה מהכרטיס"),
       el("button",{class:"btn",onclick:closeDialog},"ביטול")))}
 
@@ -568,14 +580,14 @@ function field(label,id,val,attrs={}){return el("label",{class:attrs.full?"full"
 function personForm(p){return el("div",{class:"form"},
   ...(()=>{const n=names(p);return[field("שם פרטי (עברית)","f-given",n.gH),field("שם משפחה (עברית)","f-surname",n.sH),field("First name (English)","f-given-en",n.gE,{extra:{dir:"ltr"}}),field("Last name (English)","f-surname-en",n.sE,{extra:{dir:"ltr"}})]})(),
   field("שם לאחר נישואין / שם נוסף","f-married",p.marriedName),field("מין","f-sex",p.sex||"U",{select:[["M","זכר"],["F","נקבה"],["U","לא ידוע"]]}),
-  field("תאריך לידה","f-bdate",p.birthDate,{extra:{placeholder:"למשל 27 JUL 1932 או 1932"}}),field("מקום לידה","f-bplace",p.birthPlace),
-  el("label",{class:"check full"},el("input",{type:"checkbox",id:"f-dec",checked:!!p.deceased}),"נפטר/ה"),
-  field("תאריך פטירה","f-ddate",p.deathDate),field("מקום פטירה","f-dplace",p.deathPlace),
+  field("תאריך לידה","f-bdate",dateToInput(p.birthDate),{extra:DATE_PH}),field("מקום לידה","f-bplace",p.birthPlace),
+  el("p",{class:"hint full",style:"margin:0",text:"תאריכים: יום/חודש/שנה (15/03/2026), חודש/שנה (3/2026) או רק שנה. אפשר גם ״בערך 1930״, ״לפני 1940״, ״בין 1930 ל-1935״."}),el("label",{class:"check full"},el("input",{type:"checkbox",id:"f-dec",checked:!!p.deceased}),"נפטר/ה"),
+  field("תאריך פטירה","f-ddate",dateToInput(p.deathDate),{extra:DATE_PH}),field("מקום פטירה","f-dplace",p.deathPlace),
   field("מקום קבורה","f-burial",p.burialPlace),field("מקצוע","f-occ",p.occupation),
   field("מגורים","f-res",p.residence,{full:true}),
   field("הערות וסיפורים","f-notes",p.notes,{full:true,textarea:true}),
   el("label",{class:"check full"},el("input",{type:"checkbox",id:"f-unc",checked:!!p.uncertain}),"הקשר של האדם הזה משוער ודורש אימות"))}
-function readForm(p){const g=i=>($("#"+i)?.value||"").trim();return{...p,given:g("f-given"),surname:g("f-surname"),givenEn:g("f-given-en"),surnameEn:g("f-surname-en"),marriedName:g("f-married"),sex:g("f-sex")||"U",birthDate:g("f-bdate"),birthPlace:g("f-bplace"),deceased:$("#f-dec").checked||!!g("f-ddate"),deathDate:g("f-ddate"),deathPlace:g("f-dplace"),burialPlace:g("f-burial"),occupation:g("f-occ"),residence:g("f-res"),notes:$("#f-notes").value,uncertain:$("#f-unc").checked}}
+function readForm(p){const g=i=>($("#"+i)?.value||"").trim();return{...p,given:g("f-given"),surname:g("f-surname"),givenEn:g("f-given-en"),surnameEn:g("f-surname-en"),marriedName:g("f-married"),sex:g("f-sex")||"U",birthDate:inputToDate(g("f-bdate")),birthPlace:g("f-bplace"),deceased:$("#f-dec").checked||!!g("f-ddate"),deathDate:inputToDate(g("f-ddate")),deathPlace:g("f-dplace"),burialPlace:g("f-burial"),occupation:g("f-occ"),residence:g("f-res"),notes:$("#f-notes").value,uncertain:$("#f-unc").checked}}
 const blank=()=>({given:"",surname:"",marriedName:"",suffix:"",sex:"U",birthDate:"",birthPlace:"",deceased:false,deathDate:"",deathPlace:"",burialPlace:"",occupation:"",residence:"",notes:"",sources:[],remotePhotos:[],photos:[],docs:[],uncertain:false});
 function openEdit(id){const p=P(id);openDialog(el("h2",{text:"עריכת "+fullName(p)}),personForm(p),el("div",{class:"foot"},
   el("button",{class:"btn primary",onclick:async()=>{const np=readForm(p);if(!np.given&&!np.surname&&!np.givenEn&&!np.surnameEn){toast("צריך לפחות שם פרטי או שם משפחה.",true);return}closeDialog();if(await savePerson(np))toast("נשמר.")}},"שמירה"),el("button",{class:"btn",onclick:closeDialog},"ביטול")))}
@@ -607,10 +619,10 @@ async function linkRelative(id,role,rid,famId){const p=P(id),r=P(rid);
   else if(role==="sibling"){let f=birthFam(id);if(f)await saveFam({...f,children:[...new Set([...(f.children||[]),rid])]});else await saveFam({id:uid("F"),husb:"",wife:"",children:[id,rid],marrDate:"",marrPlace:"",divorced:false,uncertain:false,notes:""})}}
 function openFamEdit(fid){const f=S.fams[fid];const names=[f.husb,f.wife].filter(x=>x&&P(x)).map(x=>shortName(P(x))).join(" ו");
   const kidsBox=el("div",{class:"chips"});(f.children||[]).filter(P).forEach(k=>kidsBox.append(el("span",{class:"chip"},shortName(P(k)),el("button",{class:"btn small danger",type:"button",onclick:async()=>{closeDialog();await saveFam({...S.fams[fid],children:(S.fams[fid].children||[]).filter(x=>x!==k)});toast("הקשר הוסר.")}},"הסרה"))));
-  openDialog(el("h2",{text:"משפחה: "+(names||"ללא הורים")}),el("div",{class:"form"},field("תאריך נישואין","ff-date",f.marrDate),field("מקום נישואין","ff-place",f.marrPlace),
+  openDialog(el("h2",{text:"משפחה: "+(names||"ללא הורים")}),el("div",{class:"form"},field("תאריך נישואין","ff-date",dateToInput(f.marrDate),{extra:DATE_PH}),field("מקום נישואין","ff-place",f.marrPlace),
     el("label",{class:"check full"},el("input",{type:"checkbox",id:"ff-div",checked:!!f.divorced}),"התגרשו"),el("label",{class:"check full"},el("input",{type:"checkbox",id:"ff-unc",checked:!!f.uncertain}),"קשר משוער"),field("הערות","ff-notes",f.notes,{full:true,textarea:true})),
     el("div",{class:"hint",text:"ילדים במשפחה (הסרה מנתקת את הקשר בלבד):"}),kidsBox,
-    el("div",{class:"foot"},el("button",{class:"btn primary",onclick:async()=>{const nf={...f,marrDate:$("#ff-date").value.trim(),marrPlace:$("#ff-place").value.trim(),divorced:$("#ff-div").checked,uncertain:$("#ff-unc").checked,notes:$("#ff-notes").value};closeDialog();await saveFam(nf);toast("נשמר.")}},"שמירה"),
+    el("div",{class:"foot"},el("button",{class:"btn primary",onclick:async()=>{const nf={...f,marrDate:inputToDate($("#ff-date").value),marrPlace:$("#ff-place").value.trim(),divorced:$("#ff-div").checked,uncertain:$("#ff-unc").checked,notes:$("#ff-notes").value};closeDialog();await saveFam(nf);toast("נשמר.")}},"שמירה"),
       el("button",{class:"btn danger",onclick:()=>{openDialog(el("h2",{text:"לנתק את הקשר המשפחתי?"}),el("p",{text:"האנשים עצמם יישארו בעץ. רק הקשר בין בני הזוג וילדיהם יימחק."}),el("div",{class:"foot"},el("button",{class:"btn danger",onclick:async()=>{closeDialog();await delDoc("families",fid);toast("הקשר נמחק.")}},"כן, לנתק"),el("button",{class:"btn",onclick:closeDialog},"ביטול")))}},"ניתוק הקשר"),
       el("button",{class:"btn",onclick:closeDialog},"ביטול")))}
 function confirmDelete(id){const p=P(id);openDialog(el("h2",{text:"למחוק את "+fullName(p)+"?"}),el("p",{text:"האדם יימחק מהעץ ויוסר מכל הקשרים המשפחתיים שלו. אי אפשר לבטל את זה."}),el("div",{class:"foot"},
